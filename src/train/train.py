@@ -1,4 +1,6 @@
-# from https://github.com/ashleve/lightning-hydra-template/blob/main/src/train.py
+# References
+# https://github.com/ashleve/lightning-hydra-template/blob/main/src/train.py
+
 from importlib.util import find_spec
 from pathlib import Path
 from typing import List, Optional, Tuple
