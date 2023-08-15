@@ -53,7 +53,7 @@ class MNISTDataModule:
 
         # data transformations
         self.transforms = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+            [transforms.ToTensor(), transforms.Normalize(mean=(0.5,), std=(0.5,))]
         )
 
         self.data_train: Optional[Dataset] = None
