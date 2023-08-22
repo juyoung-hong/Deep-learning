@@ -1,0 +1,8 @@
+# from https://github.com/ashleve/lightning-hydra-template/blob/main/configs/data/mnist.yaml
+_target_: src.data.cifar10_datamodule.CIFAR10DataModule
+data_dir: ${paths.data_dir}
+train_val_test_split: [50_000, 5_000, 5_000]
+batch_size: 128
+size: [64, 64] # (h, w) or int
+num_workers: 2
+pin_memory: false
