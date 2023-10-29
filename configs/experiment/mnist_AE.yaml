@@ -1,0 +1,28 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: mnist.yaml
+  - override /model: AE.yaml
+  - override /loss: MSELoss.yaml
+  - override /optimizer: Adam.yaml
+  - override /trainer: GenerativeModels.yaml
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["mnist", "AutoEncoder"]
+
+seed: 42
+
+trainer:
+  epochs: 30
+  accelerator: cuda
+
+optimizer:
+  lr: 0.0005
+
+data:
+  batch_size: 32

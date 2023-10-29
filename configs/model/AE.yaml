@@ -1,0 +1,11 @@
+_target_: src.models.AutoEncoder.AutoEncoder
+
+Encoder:
+  _target_: src.models.AutoEncoder.Encoder
+  batch_size: 64
+  channels: 1
+
+Decoder:
+  _target_: src.models.AutoEncoder.Decoder
+  batch_size: 64
+  channels: 1
