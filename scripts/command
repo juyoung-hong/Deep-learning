@@ -8,6 +8,9 @@ tensorboard --logdir=logs/train/runs
 # Train simple dense net
 nohup python3 src/train/train.py &> logs/train_logs/simple_dense_net.log &
 
+# Train Auto Encoder
+nohup python3 src/train/train_AE.py experiment=mnist_AE.yaml &> logs/train_logs/mnist_AE.log &
+
 # Train GAN
 nohup python3 src/train/train_GAN.py experiment=mnist_GAN.yaml &> logs/train_logs/mnist_GAN.log &
 
