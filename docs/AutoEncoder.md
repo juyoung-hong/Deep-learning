@@ -18,7 +18,7 @@
 
 ## train command
 ```bash
-python3 src/train/train_AE.py experiment=mnist_AE.yaml &> logs/train_logs/mnist_AE.log
+python3 src/train/train_AE.py experiment=mnist_AE.yaml
 ```
 
 ## architecture

@@ -24,7 +24,7 @@
 
 ## train command
 ```bash
-nohup python3 src/train/train_VAE.py experiment=mnist_VAE.yaml &> logs/train_logs/mnist_VAE.log &
+python3 src/train/train_VAE.py experiment=mnist_VAE.yaml
 ```
 
 ## inference command

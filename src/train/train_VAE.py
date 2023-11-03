@@ -182,9 +182,9 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                     for k, v in metrics.items():
                         if k.startswith('Train/'):
                             train_loss = v.compute()
-                            message = f"{k}: {train_loss}"
+                            message = f"Epoch: {epoch} {k}: {train_loss}"
                             log.info(message)
-                            logger.add_scalar(k, train_loss, step)
+                            logger.add_scalar(k, train_loss, global_step)
 
             if epoch % cfg.trainer.check_val_every_n_epoch == 0:
                 # ---------------------
@@ -212,7 +212,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 for k, v in metrics.items():
                     if k.startswith('Val/'):
                         val_loss = v.compute()
-                        message = f"{k}: {val_loss}"
+                        message = f"Epoch: {epoch} {k}: {val_loss}"
                         log.info(message)
                         logger.add_scalar(k, val_loss, epoch)
 

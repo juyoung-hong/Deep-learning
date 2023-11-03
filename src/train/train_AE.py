@@ -162,7 +162,6 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
 
                 # retrieve targets
                 images = images.to(device)
-                train_loss = metrics['Train/MSELoss']
 
                 # train step
                 optimizer.zero_grad()
@@ -171,13 +170,17 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 loss.backward()
                 optimizer.step()
 
+                # update metrics
+                metrics['Train/MSELoss'](loss)
+
                 # Get metric
                 if step % cfg.trainer.log_every_n_step == 0:
                     for k, v in metrics.items():
                         if k.startswith('Train/'):
-                            message = f"{k}: {v(loss)}"
+                            train_loss = v.compute()
+                            message = f"Epoch: {epoch} {k}: {train_loss}"
                             log.info(message)
-                            logger.add_scalar(k, v.compute(), step)
+                            logger.add_scalar(k, train_loss, global_step)
 
             if epoch % cfg.trainer.check_val_every_n_epoch == 0:
                 # ---------------------
@@ -191,20 +194,19 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 for step, (images, labels) in enumerate(tqdm(val_dataloader)):
                     # retrieve targets
                     images = images.to(device)
-                    val_loss = metrics['Val/MSELoss']
 
                     # validation step
                     with torch.no_grad():
                         outputs = model(images)
                         loss = criterion(outputs, images)
-
-                    # Get metric
-                    batch_val_loss = val_loss(loss)
+                    
+                    # update metrics
+                    metrics['Val/MSELoss'](loss)
                 
                 for k, v in metrics.items():
                     if k.startswith('Val/'):
                         val_loss = v.compute()
-                        message = f"{k}: {val_loss}"
+                        message = f"Epoch: {epoch} {k}: {val_loss}"
                         log.info(message)
                         logger.add_scalar(k, val_loss, epoch)
 
@@ -243,15 +245,14 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         for step, (images, labels) in enumerate(tqdm(test_dataloader)):
             # retrieve targets
             images = images.to(device)
-            test_loss = metrics['Test/MSELoss']
 
             # validation step
             with torch.no_grad():
                 outputs = model(images)
                 loss = criterion(outputs, images)
 
-            # Get metric
-            batch_test_loss = test_loss(loss)
+            # update metrics
+            metrics['Test/MSELoss'](loss)
         
         for k, v in metrics.items():
             if k.startswith('Test/'):
