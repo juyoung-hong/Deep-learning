@@ -19,7 +19,7 @@ seed: 42
 
 trainer:
   epochs: 200
-  accelerator: cpu
+  accelerator: cuda
 
 optimizer:
   lr: 0.0002
@@ -30,13 +30,12 @@ data:
 model:
   Generator:
     z_dim: 64
-    batch_size: 256
     channels: 1
     height: 28
     width: 28
+    device: 'cuda'
 
   Discriminator:
-    batch_size: 256
     channels: 1
     height: 28
     width: 28

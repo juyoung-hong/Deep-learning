@@ -3,14 +3,12 @@ _target_: src.models.GAN.GAN
 Generator:
   _target_: src.models.GAN.Generator
   z_dim: 100
-  batch_size: 128
   channels: 1
   height: 28
   width: 28
 
 Discriminator:
   _target_: src.models.GAN.Discriminator
-  batch_size: 128
   channels: 1
   height: 28
   width: 28

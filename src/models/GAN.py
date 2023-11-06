@@ -40,17 +40,17 @@ class Generator(nn.Module):
     def __init__(
         self,
         z_dim: int = 100,
-        batch_size: int = 64,
         channels: int = 1,
         height: int = 28,
         width: int = 28,
+        device: str = 'cpu'
     ):
         super().__init__()
         self.z_dim = z_dim
-        self.batch_size = batch_size
         self.channels = channels
         self.height = height
         self.width = width
+        self.device = device
 
         net = [
             nn.Linear(self.z_dim, 256),
@@ -82,14 +82,12 @@ class Generator(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def sample(self):
-        batch_size = self.batch_size if self.training else 1
-        z = torch.randn(self.z_dim * batch_size)
-        z = z.view(batch_size, -1)  # reshape (B * 100) -> (B, 100)
+    def sample(self, batch_size):
+        z = torch.randn(size=(batch_size, self.z_dim), device=self.device)
         return z
 
-    def forward(self):
-        z = self.sample()  # sample from noraml dist.
+    def forward(self, batch_size):
+        z = self.sample(batch_size)  # sample from noraml dist.
         output = self.net(z)  # mlp forward
         output = output.view(
             -1, self.channels, self.height, self.width
@@ -108,10 +106,9 @@ class Discriminator(nn.Module):
     """
 
     def __init__(
-        self, batch_size: int = 64, channels: int = 1, height: int = 28, width: int = 28
+        self, channels: int = 1, height: int = 28, width: int = 28
     ):
         super().__init__()
-        self.batch_size = batch_size
         self.channels = channels
         self.height = height
         self.width = width
@@ -146,7 +143,7 @@ class Discriminator(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, input):
-        x = input.view(self.batch_size, -1)  # reshape (B, 1, 28, 28) -> (B, 784)
+        x = input.flatten(start_dim=1) # reshape (B, 1, 28, 28) -> (B, 784)
         output = self.net(x)  # mlp forward
 
         return output

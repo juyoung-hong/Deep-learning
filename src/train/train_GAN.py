@@ -39,6 +39,42 @@ from src import utils
 
 log = utils.get_pylogger(__name__)
 
+def get_metrics(device):
+
+    metrics = {
+        'Train/GLoss': MeanMetric().to(device),
+        'Train/DLoss': MeanMetric().to(device),
+        'Val/GLoss': MeanMetric().to(device),
+        'Val/DLoss': MeanMetric().to(device),
+        'Test/GLoss': MeanMetric().to(device),
+        'Test/DLoss': MeanMetric().to(device),
+    }
+
+    return metrics
+
+def save_figures(real_images, fake_images, cfg, epoch, logger, save_real, test):
+    prefix = ('best' if test else 'epoch')
+    if save_real:
+        filename = ('real_epoch' if epoch == 0 else "real_best")
+        save_real_path = Path(cfg.trainer.save_ckpt_dirpath) / (
+        cfg.trainer.save_generated_filename + f"/{filename}.png"
+        )
+        save_real_path.parent.mkdir(parents=True, exist_ok=True)
+        grid_image = make_grid(
+        real_images, nrow=3, normalize=True, value_range=(-1, 1)
+        )
+        save_image(grid_image, save_real_path)
+
+    save_fake_path = Path(cfg.trainer.save_ckpt_dirpath) / (
+        cfg.trainer.save_generated_filename + f"/fake_{prefix}_{epoch}.png"
+    )
+    save_fake_path.parent.mkdir(parents=True, exist_ok=True)
+    grid_image = make_grid(
+        fake_images, nrow=3, normalize=True, value_range=(-1, 1)
+    )
+    save_image(grid_image, save_fake_path)
+    if not test:
+        logger.add_image("image", grid_image, epoch)
 
 def train(cfg: DictConfig) -> Tuple[dict, dict]:
     """Trains the model. Can additionally evaluate on a testset, using best weights obtained during
@@ -69,6 +105,8 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
 
     # Get data loader.
     train_dataloader = datamodule.train_dataloader()
+    val_dataloader = datamodule.val_dataloader()
+    test_dataloader = datamodule.test_dataloader()
 
     device = cfg.trainer.accelerator
     log.info(f"Instantiating model <{cfg.model._target_}>")
@@ -83,6 +121,9 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     optimizer = hydra.utils.instantiate(cfg.optimizer)
     optimizer_G = optimizer(params=G.parameters())
     optimizer_D = optimizer(params=D.parameters())
+
+    # Get Metrics
+    metrics = get_metrics(device)
 
     log.info(f"Instantiating logger <{cfg.logger._target_}>")
     logger = hydra.utils.instantiate(cfg.get("logger"))
@@ -105,29 +146,20 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     if cfg.get("train"):
         log.info("Starting training!")
 
-        # metric objects for calculating inception score across batches
-        # val_is = InceptionScore().to(device)
-        # val_fid = FrechetInceptionDistance().to(device)
-
-        # for averaging loss across batches
-        train_d_loss = MeanMetric().to(device)
-        train_g_loss = MeanMetric().to(device)
-
-        # for tracking best so far validation IS, FID
-        # val_is_best = MinMetric().to(device)
-        # val_fid_best = MinMetric().to(device)
-
         # Adversarial ground truths
         real_label = 1.0
         fake_label = 0.0
 
         for epoch in range(cfg.trainer.epochs):
             # train step start
-            train_d_loss.reset()
-            train_g_loss.reset()
             G.train()
             D.train()
-            for images, labels in tqdm(train_dataloader):
+            for k, v in metrics.items():
+                if k.startswith('Train/'):
+                    v.reset()
+
+            for step, (images, labels) in enumerate(tqdm(train_dataloader)):
+                global_step = epoch * len(train_dataloader) + step
                 # ---------------------
                 #  Train Discriminator: maximize log(D(x)) + log(1 - D(G(z)))
                 # ---------------------
@@ -141,7 +173,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 real_d_loss = criterion(outputs, labels)
                 real_d_loss.backward()
 
-                fake_images = G()
+                fake_images = G(cfg.data.batch_size)
                 labels.fill_(fake_label)
                 outputs = D(fake_images.detach()).view(-1)
                 fake_d_loss = criterion(outputs, labels)
@@ -161,42 +193,60 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 g_loss.backward()
                 optimizer_G.step()
 
-                # Get metric
-                batch_train_d_loss = train_d_loss(d_loss)
-                batch_train_g_loss = train_g_loss(g_loss)
-                log.info(f"train/D_loss: {batch_train_d_loss}")
-                log.info(f"train/G_loss: {batch_train_g_loss}")
+                # update metrics
+                metrics['Train/GLoss'](d_loss)
+                metrics['Train/DLoss'](g_loss)
 
-            # train step end
-            logger.add_scalar("Train/D_Loss", train_d_loss.compute(), epoch)
-            logger.add_scalar("Train/G_Loss", train_g_loss.compute(), epoch)
+                # Get metric
+                if step % cfg.trainer.log_every_n_step == 0:
+                    for k, v in metrics.items():
+                        if k.startswith('Train/'):
+                            train_loss = v.compute()
+                            message = f"Epoch: {epoch} {k}: {train_loss}"
+                            log.info(message)
+                            logger.add_scalar(k, train_loss, global_step)
 
             if epoch % cfg.trainer.check_val_every_n_epoch == 0:
-                # validation step start
-                # val_is.reset()
-                # val_fid.reset()
-                fake_images = []
+                # ---------------------
+                #  Validation
+                # --------------------- 
                 G.eval()
-                for i in range(9):
+                D.eval()
+                for k, v in metrics.items():
+                    if k.startswith('Val/'):
+                        v.reset()
+
+                for step, (images, labels) in enumerate(tqdm(val_dataloader)):
                     with torch.no_grad():
-                        fake_image = G()
-                    fake_images.append(fake_image.squeeze(0))
+                        real_images = images.to(device)
+                        labels = torch.full(
+                            (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
+                        )
+                        
+                        outputs = D(real_images).view(-1)
+                        real_d_loss = criterion(outputs, labels)
 
-                # Get metric
-                # batch_val_is = val_is(fake_images)
-                # batch_val_fid = val_fid(fake_images)
-                # log.info(f"val/InceptionScore: {batch_val_is}")
-                # log.info(f"val/FrechetInceptionDistance: {batch_val_fid}")
+                        fake_images = G(cfg.data.batch_size)
+                        labels.fill_(fake_label)
+                        outputs = D(fake_images.detach()).view(-1)
+                        fake_d_loss = criterion(outputs, labels)
 
-                # validation step end
-                # is_ = val_is.compute()  # get current val IS
-                # fid = val_fid.compute()  # get current val FID
-                # val_is_best(is_)  # update best so far val IS
-                # val_fid_best(fid)  # update best so far val FID
-                # log.info(f"val/IS_best: {val_is_best.compute()}")
-                # log.info(f"val/FID_best: {val_fid_best.compute()}")
-                # logger.add_scalar("Val/IS", val_is.compute(), epoch)
-                # logger.add_scalar("Val/FID", val_fid.compute(), epoch)
+                        d_loss = real_d_loss + fake_d_loss
+
+                        labels.fill_(real_label)
+                        outputs = D(fake_images).view(-1)
+                        g_loss = criterion(outputs, labels)
+
+                    # update metrics
+                    metrics['Val/GLoss'](g_loss)
+                    metrics['Val/DLoss'](d_loss)
+                
+                for k, v in metrics.items():
+                    if k.startswith('Val/'):
+                        val_loss = v.compute()
+                        message = f"Epoch: {epoch} {k}: {val_loss}"
+                        log.info(message)
+                        logger.add_scalar(k, val_loss, epoch)
 
             if epoch % cfg.trainer.save_ckpt_every_n_epoch == 0:
                 save_path = Path(cfg.trainer.save_ckpt_dirpath) / (
@@ -212,15 +262,10 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 torch.save(state, save_path)
 
             if epoch % cfg.trainer.generate_every_n_epoch == 0:
-                save_path = Path(cfg.trainer.save_ckpt_dirpath) / (
-                    cfg.trainer.save_generated_filename + f"/epoch_{epoch}.png"
-                )
-                save_path.parent.mkdir(parents=True, exist_ok=True)
-                grid_image = make_grid(
-                    fake_images, nrow=3, normalize=True, value_range=(-1, 1)
-                )
-                save_image(grid_image, save_path)
-                logger.add_image("image", grid_image, epoch)
+                real_images = images[:9]
+                fake_images = fake_images[:9]
+                save_real = (True if epoch == 0 else False)
+                save_figures(real_images, fake_images, cfg, epoch, logger, save_real, False)
 
     if cfg.get("test"):
         log.info("Starting testing!")
@@ -229,39 +274,50 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
             log.warning("Best ckpt not found! Using current weights for testing...")
             ckpt_path = None
 
-        # test_is = InceptionScore().to(device)
-        # test_fid = FrechetInceptionDistance().to(device)
-
-        # test step start
-        # test_is.reset()
-        # test_fid.reset()
-
-        fake_images = []
+        # ---------------------
+        #  Test
+        # ---------------------   
         G.eval()
-        for i in range(9):
+        D.eval()
+        for k, v in metrics.items():
+            if k.startswith('Test/'):
+                v.reset()
+
+        for step, (images, labels) in enumerate(tqdm(test_dataloader)):
             with torch.no_grad():
-                fake_image = G()
-            fake_images.append(fake_image.squeeze(0))
+                real_images = images.to(device)
+                labels = torch.full(
+                    (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
+                )
+                
+                outputs = D(real_images).view(-1)
+                real_d_loss = criterion(outputs, labels)
 
-        # Get metric
-        # batch_test_is = test_is(fake_images)
-        # batch_test_fid = test_fid(fake_images)
-        # log.info(f"test/InceptionScore: {batch_test_is}")
-        # log.info(f"test/FrechetInceptionDistance: {batch_test_fid}")
+                fake_images = G(cfg.data.batch_size)
+                labels.fill_(fake_label)
+                outputs = D(fake_images.detach()).view(-1)
+                fake_d_loss = criterion(outputs, labels)
 
-        # test step end
-        # is_ = test_is.compute()  # get current test IS.
-        # fid = test_fid.compute()  # get current test FID.
-        # logger.add_scalar("Test/IS", test_is.compute(), epoch)
-        # logger.add_scalar("Test/FID", test_fid.compute(), epoch)
+                d_loss = real_d_loss + fake_d_loss
 
-        save_path = Path(cfg.trainer.save_ckpt_dirpath) / (
-            cfg.trainer.save_generated_filename + f"/best.png"
-        )
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        grid_image = make_grid(fake_images, nrow=3, normalize=True, value_range=(-1, 1))
-        save_image(grid_image, save_path)
-        logger.add_image("image", grid_image, epoch)
+                labels.fill_(real_label)
+                outputs = D(fake_images).view(-1)
+                g_loss = criterion(outputs, labels)
+
+            # update metrics
+            metrics['Test/GLoss'](g_loss)
+            metrics['Test/DLoss'](d_loss)
+        
+        for k, v in metrics.items():
+            if k.startswith('Test/'):
+                test_loss = v.compute()
+                message = f"{k}: {test_loss}"
+                log.info(message)
+                logger.add_scalar(k, test_loss, epoch)
+
+        real_images = images[:9]
+        fake_images = fake_images[:9]
+        save_figures(real_images, fake_images, cfg, epoch, logger, True, True)
 
 
 @hydra.main(version_base="1.3", config_path="../../configs", config_name="train.yaml")
