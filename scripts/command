@@ -8,15 +8,20 @@ tensorboard --logdir=logs/train/runs
 # Train simple dense net
 nohup python3 src/train/train.py &> logs/train_logs/simple_dense_net.log &
 
+# Train Auto Encoder
+nohup python3 src/train/train_AE.py experiment=mnist_AE.yaml &> logs/train_logs/mnist_AE.log &
+
 # Train / Inference Variational Auto Encoder
 nohup python3 src/train/train_VAE.py experiment=mnist_VAE.yaml &> logs/train_logs/mnist_VAE.log &
 python3 src/inference/inference_VAE.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-01_11-35-03/ckpt/model/epoch_29.pth
 
-# Train Auto Encoder
-nohup python3 src/train/train_AE.py experiment=mnist_AE.yaml &> logs/train_logs/mnist_AE.log &
-
-# Train GAN
+# Train / Inference GAN
 nohup python3 src/train/train_GAN.py experiment=mnist_GAN.yaml &> logs/train_logs/mnist_GAN.log &
+python3 src/inference/inference_GAN.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-05_21-46-13/ckpt/model/epoch_199.pth
+
+# Train/ Inference cGAN
+nohup python3 src/train/train_cGAN.py experiment=mnist_cGAN.yaml &> logs/train_logs/mnist_cGAN.log &
+python3 src/inference/inference_cGAN.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-07_11-08-43/ckpt/model/epoch_199.pth -l=7
 
 # Train DCGAN
 nohup python3 src/train/train_GAN.py experiment=cifar10_DCGAN.yaml &> logs/train_logs/cifar10_DCGAN.log &

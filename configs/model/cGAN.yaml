@@ -1,0 +1,17 @@
+_target_: src.models.cGAN.cGAN
+
+Generator:
+  _target_: src.models.cGAN.Generator
+  z_dim: 100
+  channels: 1
+  height: 28
+  width: 28
+  n_class: 10
+  device: 'cpu'
+
+Discriminator:
+  _target_: src.models.cGAN.Discriminator
+  channels: 1
+  height: 28
+  width: 28
+  n_class: 10
