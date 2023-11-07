@@ -39,6 +39,7 @@ python3 src/inference/inference_*.py -o=result -d=cuda -ckpt logs/train/runs/202
 |Auto Encoder|[Auto Encoder](docs/AutoEncoder.md)|
 |Auto Encoder|[Variational Auto Encoder](docs/VariationalAutoEncoder.md)|
 |GAN|[Generative Adversarial Networks](docs/GAN.md)|
+|cGAN|[Conditional Generative Adversarial Networks](docs/cGAN.md)|
 
 # References
 
