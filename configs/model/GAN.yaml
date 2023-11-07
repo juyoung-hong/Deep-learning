@@ -6,6 +6,7 @@ Generator:
   channels: 1
   height: 28
   width: 28
+  device: cpu
 
 Discriminator:
   _target_: src.models.GAN.Discriminator

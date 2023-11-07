@@ -58,11 +58,13 @@ def inference(args):
     )
 
     model = GAN(Generator=G, Discriminator=D).to(device)
+    model.eval()
 
     checkpoint = torch.load(args.ckpt_path)
     model.load_state_dict(checkpoint['model'])
 
-    pred = model.Generator(1)
+    with torch.no_grad():
+        pred = model(1)
 
     save_path = Path(args.output) / "gan_predict.png"
     save_image(pred, save_path)

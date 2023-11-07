@@ -49,8 +49,10 @@ def inference(args):
 
     checkpoint = torch.load(args.ckpt_path)
     model.load_state_dict(checkpoint['model'])
+    model.eval()
 
-    pred = model.predict(device)
+    with torch.no_grad():
+        pred = model.predict(device)
 
     save_path = Path(args.output) / "vae_predict.png"
     save_image(pred, save_path)

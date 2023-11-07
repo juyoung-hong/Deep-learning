@@ -24,8 +24,8 @@ class GAN(nn.Module):
     def get_discriminator(self):
         return self.Discriminator
 
-    def forward(self):
-        return self.Generator.forward()
+    def forward(self, batch_size):
+        return self.Generator(batch_size)
 
 
 class Generator(nn.Module):
@@ -35,6 +35,10 @@ class Generator(nn.Module):
 
     Parameters:
         z_dim (`int`, *optional*, default to `100`): The size of noise as a input.
+        channels (`int`, *optional*, default to `1`): The channel of a input.
+        height (`int`, *optional*, default to `28`): The height of a input.
+        width (`int`, *optional*, default to `28`): The width of a input.
+        device (`str`, *optional*, default to `cpu`): one of ['cpu', 'cuda', 'mps'].
     """
 
     def __init__(
@@ -102,7 +106,9 @@ class Discriminator(nn.Module):
     Generative adversarial networks. Communications of the ACM, 63(11), 139-144.) Discriminator implementation.
 
     Parameters:
-        z_dim (`int`, *optional*, default to `100`): The size of noise as a input.
+        channels (`int`, *optional*, default to `1`): The channel of a input.
+        height (`int`, *optional*, default to `28`): The height of a input.
+        width (`int`, *optional*, default to `28`): The width of a input.
     """
 
     def __init__(

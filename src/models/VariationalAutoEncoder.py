@@ -49,6 +49,7 @@ class Encoder(nn.Module):
 
     Parameters:
         channels (`int`, *optional*, default to `1`): Channels of input image.
+        z_dim (`int`, *optional*, default to `64`): The size of noise as a input.
     """
 
     def __init__(
@@ -110,6 +111,7 @@ class Decoder(nn.Module):
 
     Parameters:
         channels (`int`, *optional*, default to `1`): Channels of output image.
+        z_dim (`int`, *optional*, default to `64`): The size of noise as a input.
     """
 
     def __init__(
