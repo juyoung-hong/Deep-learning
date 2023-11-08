@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import List
 
 
 class AutoEncoder(nn.Module):
@@ -34,31 +35,29 @@ class Encoder(nn.Module):
     An Auto Encoder (Encoder) implementation.
 
     Parameters:
-        batch_size (`int`, *optional*, default to `64`): The size of mini-batch of input.
-        channels (`int`, *optional*, default to `1`): Channels of input image.
+        input_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of input image [C, H, W].
     """
 
     def __init__(
         self,
-        batch_size: int = 64,
-        channels: int = 1,
+        input_shape: List = [1, 28, 28]
     ):
         super().__init__()
-        self.batch_size = batch_size
-        self.channels = channels
+        self.input_shape = input_shape
+        self.in_channels = self.input_shape[0]
 
         conv_net = [
-            nn.Conv2d(self.channels, 32, 3, 2, 1), # (B, 32, 14, 14)
-            nn.LeakyReLU(True),
+            nn.Conv2d(self.in_channels, 32, 3, 2, 1), # (B, 32, 14, 14)
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.Conv2d(32, 64, 3, 2, 1), # (B, 64, 7, 7)
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.Conv2d(64, 64, 3, 2, 1), # (B, 64, 4, 4)
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.Conv2d(64, 64, 3, 2, 1), # (B, 64, 2, 2)
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
         ]
 
         # Concat all layers
@@ -93,32 +92,28 @@ class Decoder(nn.Module):
     An Auto Encoder (Decoder) implementation.
 
     Parameters:
-        batch_size (`int`, *optional*, default to `64`): The size of mini-batch of input.
-        channels (`int`, *optional*, default to `1`): Channels of input image.
+        output_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of output image [C, H, W].
     """
 
     def __init__(
         self, 
-        batch_size: int = 64, 
-        channels: int = 1,
+        output_shape: List = [1, 28, 28]
     ):
         super().__init__()
-        self.batch_size = batch_size
-        self.channels = channels
+        self.output_shape = output_shape
+        self.out_channels = self.output_shape[0]
 
         conv_net = [
             nn.ConvTranspose2d(64, 64, 4, 2, 1),  # (B, 64, 4, 4)
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.ConvTranspose2d(64, 64, 3, 2, 1),  # (B, 64, 7, 7)
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.ConvTranspose2d(64, 32, 4, 2, 1),  # (B, 32, 14, 14)
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.ConvTranspose2d(32, 1, 4, 2, 1),  # (B, 1, 28, 28)
-            nn.LeakyReLU(True),
-            # -----------------------------
+            nn.ConvTranspose2d(32, self.out_channels, 4, 2, 1),  # (B, 1, 28, 28)
             nn.Tanh() # last activation layer [-1,1]
         ]
 

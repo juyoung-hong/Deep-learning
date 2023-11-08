@@ -29,15 +29,18 @@ tensorboard --logdir=logs/train/runs
 ```
 4. Inference
 ```bash
-python3 src/inference/inference_*.py -o=result -d=cuda -ckpt logs/train/runs/2023-11-03_12-37-21/ckpt/model/epoch_29.pth
+python3 src/inference/inference_VAE.py -o=result -d=cuda -ckpt logs/train/runs/2023-11-03_12-37-21/ckpt/model/epoch_29.pth
 ```
 
 ## Model Zoo
 
 |Model Type|Docs|
 |:---:|:---:|
-|Auto Encoder|[Auto Encoder](docs/AutoEncoder.md)|
-|Auto Encoder|[Variational Auto Encoder](docs/VariationalAutoEncoder.md)|
+|AE|[Auto Encoder](docs/AutoEncoder.md)|
+|VAE|[Variational Auto Encoder](docs/VariationalAutoEncoder.md)|
+|GAN|[Generative Adversarial Networks](docs/GAN.md)|
+|cGAN|[Conditional Generative Adversarial Networks](docs/cGAN.md)|
+|DCGAN|[Deep Convolutional Generative Adversarial Networks](docs/DCGAN.md)|
 
 # References
 

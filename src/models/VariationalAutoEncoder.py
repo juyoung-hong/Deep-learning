@@ -1,17 +1,18 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 from torch.nn.modules.loss import _Loss
+from typing import List
 
 
 class VariationalAutoEncoder(nn.Module):
     r"""
-    An AutoEncoder implementation.
+    An VariationalAutoEncoder (Kingma, Diederik P., and Max Welling. "Auto-Encoding Variational Bayes." 
+    stat 1050 (2014): 1.) implementation.
 
     Parameters:
-        Encoder (`nn.Module`): The Encoder of AutoEncoder.
-        Decoder (`nn.Module`): The Decoder of AutoEncoder.
+        Encoder (`nn.Module`): The Encoder of VariationalAutoEncoder.
+        Decoder (`nn.Module`): The Decoder of VariationalAutoEncoder.
     """
 
     def __init__(self, Encoder: nn.Module, Decoder: nn.Module):
@@ -37,7 +38,7 @@ class VariationalAutoEncoder(nn.Module):
         output = self.Decoder(z)
         return output, mu, log_var
     
-    def predict(self, device):
+    def predict(self, device: str = 'cpu'):
         epsilon = torch.randn((1, self.z_dim, 1, 1), device=device)
         output = self.Decoder(epsilon)
         return output
@@ -45,23 +46,26 @@ class VariationalAutoEncoder(nn.Module):
 
 class Encoder(nn.Module):
     r"""
-    An Auto Encoder (Encoder) implementation.
+    An VariationalAutoEncoder (Kingma, Diederik P., and Max Welling. "Auto-Encoding Variational Bayes." 
+    stat 1050 (2014): 1.) Encoder implementation.
 
     Parameters:
-        channels (`int`, *optional*, default to `1`): Channels of input image.
+        input_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of input image [C, H, W].
+        z_dim (`int`, *optional*, default to `64`): The size of latents (mu, log_var, z).
     """
 
     def __init__(
         self,
-        channels: int = 1,
+        input_shape: List = [1, 28, 28],
         z_dim: int = 64
     ):
         super().__init__()
-        self.channels = channels
+        self.input_shape = input_shape
+        self.in_channels = self.input_shape[0]
         self.z_dim = z_dim
 
         conv_net = [
-            nn.Conv2d(self.channels, 32, 3, 2, 1), # (B, 32, 14, 14)
+            nn.Conv2d(self.in_channels, 32, 3, 2, 1), # (B, 32, 14, 14)
             nn.LeakyReLU(),
             # -----------------------------
             nn.Conv2d(32, 64, 3, 2, 1), # (B, 64, 7, 7)
@@ -106,19 +110,22 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     r"""
-    An Auto Encoder (Decoder) implementation.
+    An VariationalAutoEncoder (Kingma, Diederik P., and Max Welling. "Auto-Encoding Variational Bayes." 
+    stat 1050 (2014): 1.) Decoder implementation.
 
     Parameters:
-        channels (`int`, *optional*, default to `1`): Channels of output image.
+        output_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of output image [C, H, W].
+        z_dim (`int`, *optional*, default to `64`): The size of latents (mu, log_var, z).
     """
 
     def __init__(
         self, 
-        channels: int = 1,
+        output_shape: List = [1, 28, 28],
         z_dim: int = 64
     ):
         super().__init__()
-        self.channels = channels
+        self.output_shape = output_shape
+        self.out_channels = self.output_shape[0]
         self.z_dim = z_dim
 
         self.conv_in = nn.ConvTranspose2d(self.z_dim, 64, 4, 2, 1)  # (B, 64, 2, 2)
@@ -133,7 +140,7 @@ class Decoder(nn.Module):
             nn.ConvTranspose2d(64, 32, 4, 2, 1),  # (B, 32, 14, 14)
             nn.LeakyReLU(),
             # -----------------------------
-            nn.ConvTranspose2d(32, self.channels, 4, 2, 1),  # (B, 1, 28, 28)
+            nn.ConvTranspose2d(32, self.out_channels, 4, 2, 1),  # (B, 1, 28, 28)
             nn.Tanh() # last activation layer [-1,1]
         ]
 

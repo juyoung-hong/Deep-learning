@@ -150,6 +150,8 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         real_label = 1.0
         fake_label = 0.0
 
+        n_critic = cfg.get("n_critic")
+
         for epoch in range(cfg.trainer.epochs):
             # train step start
             G.train()
@@ -166,17 +168,18 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 optimizer_D.zero_grad()
                 D.zero_grad()
                 real_images = images.to(device)
-                labels = torch.full(
+                labels = labels.to(device)
+                gan_labels = torch.full(
                     (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
                 )
-                outputs = D(real_images).view(-1)
-                real_d_loss = criterion(outputs, labels)
+                outputs = D(real_images, labels).view(-1)
+                real_d_loss = criterion(outputs, gan_labels)
                 real_d_loss.backward()
 
-                fake_images = G(cfg.data.batch_size)
-                labels.fill_(fake_label)
-                outputs = D(fake_images.detach()).view(-1)
-                fake_d_loss = criterion(outputs, labels)
+                fake_images = G(cfg.data.batch_size, labels)
+                gan_labels.fill_(fake_label)
+                outputs = D(fake_images.detach(), labels).view(-1)
+                fake_d_loss = criterion(outputs, gan_labels)
                 fake_d_loss.backward()
 
                 d_loss = real_d_loss + fake_d_loss
@@ -187,9 +190,9 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 # -----------------
                 optimizer_G.zero_grad()
                 G.zero_grad()
-                labels.fill_(real_label)
-                outputs = D(fake_images).view(-1)
-                g_loss = criterion(outputs, labels)
+                gan_labels.fill_(real_label)
+                outputs = D(fake_images, labels).view(-1)
+                g_loss = criterion(outputs, gan_labels)
                 g_loss.backward()
                 optimizer_G.step()
 
@@ -219,23 +222,24 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 for step, (images, labels) in enumerate(tqdm(val_dataloader)):
                     with torch.no_grad():
                         real_images = images.to(device)
-                        labels = torch.full(
+                        labels = labels.to(device)
+                        gan_labels = torch.full(
                             (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
                         )
                         
-                        outputs = D(real_images).view(-1)
-                        real_d_loss = criterion(outputs, labels)
+                        outputs = D(real_images, labels).view(-1)
+                        real_d_loss = criterion(outputs, gan_labels)
 
-                        fake_images = G(cfg.data.batch_size)
-                        labels.fill_(fake_label)
-                        outputs = D(fake_images.detach()).view(-1)
-                        fake_d_loss = criterion(outputs, labels)
+                        fake_images = G(cfg.data.batch_size, labels)
+                        gan_labels.fill_(fake_label)
+                        outputs = D(fake_images.detach(), labels).view(-1)
+                        fake_d_loss = criterion(outputs, gan_labels)
 
                         d_loss = real_d_loss + fake_d_loss
 
-                        labels.fill_(real_label)
-                        outputs = D(fake_images).view(-1)
-                        g_loss = criterion(outputs, labels)
+                        gan_labels.fill_(real_label)
+                        outputs = D(fake_images, labels).view(-1)
+                        g_loss = criterion(outputs, gan_labels)
 
                     # update metrics
                     metrics['Val/G_Loss'](g_loss)
@@ -286,23 +290,24 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         for step, (images, labels) in enumerate(tqdm(test_dataloader)):
             with torch.no_grad():
                 real_images = images.to(device)
-                labels = torch.full(
+                labels = labels.to(device)
+                gan_labels = torch.full(
                     (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
                 )
                 
-                outputs = D(real_images).view(-1)
-                real_d_loss = criterion(outputs, labels)
+                outputs = D(real_images, labels).view(-1)
+                real_d_loss = criterion(outputs, gan_labels)
 
-                fake_images = G(cfg.data.batch_size)
-                labels.fill_(fake_label)
-                outputs = D(fake_images.detach()).view(-1)
-                fake_d_loss = criterion(outputs, labels)
+                fake_images = G(cfg.data.batch_size, labels)
+                gan_labels.fill_(fake_label)
+                outputs = D(fake_images.detach(), labels).view(-1)
+                fake_d_loss = criterion(outputs, gan_labels)
 
                 d_loss = real_d_loss + fake_d_loss
 
-                labels.fill_(real_label)
-                outputs = D(fake_images).view(-1)
-                g_loss = criterion(outputs, labels)
+                gan_labels.fill_(real_label)
+                outputs = D(fake_images, labels).view(-1)
+                g_loss = criterion(outputs, gan_labels)
 
             # update metrics
             metrics['Test/G_Loss'](g_loss)

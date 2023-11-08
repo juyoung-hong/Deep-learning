@@ -1,0 +1,13 @@
+_target_: src.models.cGAN.cGAN
+
+Generator:
+  _target_: src.models.cGAN.Generator
+  output_shape: [1, 28, 28]
+  z_dim: 100
+  n_class: 10
+  device: 'cpu'
+
+Discriminator:
+  _target_: src.models.cGAN.Discriminator
+  input_shape: [1, 28, 28]
+  n_class: 10

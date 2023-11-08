@@ -1,6 +1,6 @@
 import sys
 sys.path.append('src/models')
-from VariationalAutoEncoder import VariationalAutoEncoder, Encoder, Decoder
+from GAN import GAN, Generator, Discriminator
 
 from pathlib import Path
 import argparse
@@ -43,24 +43,26 @@ def parse_args():
 def inference(args):
     device = args.device
 
-    encoder = Encoder(
-        input_shape=[1, 28, 28],
-        z_dim=64
-    )
-    decoder = Decoder(
+    G = Generator(
         output_shape=[1, 28, 28],
-        z_dim=64
+        z_dim=64,
+        device=device
     )
-    model = VariationalAutoEncoder(Encoder=encoder, Decoder=decoder).to(device)
+    
+    D =  Discriminator(
+        input_shape=[1, 28, 28]
+    )
+
+    model = GAN(Generator=G, Discriminator=D).to(device)
+    model.eval()
 
     checkpoint = torch.load(args.ckpt_path)
     model.load_state_dict(checkpoint['model'])
-    model.eval()
 
     with torch.no_grad():
-        pred = model.predict(device)
+        pred = model()
 
-    save_path = Path(args.output) / "vae_predict.png"
+    save_path = Path(args.output) / "gan_predict.png"
     save_image(pred, save_path)
 
 

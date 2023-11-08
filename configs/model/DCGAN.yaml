@@ -2,16 +2,10 @@ _target_: src.models.DCGAN.DCGAN
 
 Generator:
   _target_: src.models.DCGAN.Generator
+  output_shape: [1, 28, 28]
   z_dim: 100
-  batch_size: 128
-  channels: 1
-  height: 28
-  width: 28
   device: cpu
 
 Discriminator:
   _target_: src.models.DCGAN.Discriminator
-  batch_size: 128
-  channels: 1
-  height: 28
-  width: 28
+  input_shape: [1, 28, 28]

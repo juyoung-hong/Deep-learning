@@ -4,20 +4,21 @@ import torch.nn.functional as F
 from typing import List
 
 
-class GAN(nn.Module):
+class cGAN(nn.Module):
     r"""
-    A modified GAN(Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., ... & Bengio, Y. (2020).
-    Generative adversarial networks. Communications of the ACM, 63(11), 139-144.) implementation.
+    A modified cGAN(Mirza, Mehdi, and Simon Osindero. "Conditional generative adversarial nets." 
+    arXiv preprint arXiv:1411.1784 (2014).) implementation.
 
     Parameters:
-        Generator (`nn.Module`): The Generator of GAN.
-        Discriminator (`nn.Module`): The Discriminator of GAN.
+        Generator (`nn.Module`): The Generator of cGAN.
+        Discriminator (`nn.Module`): The Discriminator of cGAN.
     """
 
     def __init__(self, Generator: nn.Module, Discriminator: nn.Module):
         super().__init__()
         self.Generator = Generator
         self.Discriminator = Discriminator
+        self.device = self.Generator.device
 
     def get_generator(self):
         return self.Generator
@@ -25,40 +26,55 @@ class GAN(nn.Module):
     def get_discriminator(self):
         return self.Discriminator
 
-    def forward(self):
-        return self.Generator(1)
+    def forward(self, label: int):
+        label = torch.tensor([label], device=self.device)
+        return self.Generator(1, label)
 
 
 class Generator(nn.Module):
     r"""
-    A modified GAN(Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., ... & Bengio, Y. (2020).
-    Generative adversarial networks. Communications of the ACM, 63(11), 139-144.) Generator implementation.
+    A modified cGAN(Mirza, Mehdi, and Simon Osindero. "Conditional generative adversarial nets." 
+    arXiv preprint arXiv:1411.1784 (2014).) Generator implementation.
 
     Parameters:
         output_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of output image [C, H, W].
-        z_dim (`int`, *optional*, default to `64`): The size of noise as a input.
+        z_dim (`int`, *optional*, default to `100`): The size of noise as a input.
+        n_class (`int`, *optional*, default to `10`): The number of class label of cGAN.
         device (`str`, *optional*, default to `cpu`): one of ['cpu', 'cuda', 'mps'].
     """
 
     def __init__(
         self,
         output_shape: List = [1, 28, 28],
-        z_dim: int = 64,
+        z_dim: int = 100,
+        n_class: int = 10,
         device: str = 'cpu'
     ):
         super().__init__()
         self.out_channels, self.out_height, self.out_width = output_shape
         self.z_dim = z_dim
+        self.n_class = n_class
         self.device = device
 
+        self.embed = nn.Embedding(self.n_class, self.n_class)
+
         net = [
-            nn.Linear(self.z_dim, 256),
+            nn.Linear(self.z_dim + self.n_class, 128),
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.Linear(256, 256),
+            nn.Linear(128, 256),
+            nn.BatchNorm1d(256),
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.Linear(256, self.out_channels * self.out_width * self.out_height),
+            nn.Linear(256, 512),
+            nn.BatchNorm1d(512),
+            nn.LeakyReLU(0.2, inplace=True),
+            # -----------------------------
+            nn.Linear(512, 1024),
+            nn.BatchNorm1d(1024),
+            nn.LeakyReLU(0.2, inplace=True),
+            # -----------------------------
+            nn.Linear(1024, self.out_channels * self.out_width * self.out_height),
             nn.Tanh(),  # last activation layer [-1,1]
         ]
 
@@ -81,13 +97,15 @@ class Generator(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def sample(self, batch_size: int):
+    def sample(self, batch_size):
         z = torch.randn(size=(batch_size, self.z_dim), device=self.device)
         return z
 
-    def forward(self, batch_size: int):
+    def forward(self, batch_size, labels):
         z = self.sample(batch_size)  # sample from noraml dist.
-        output = self.net(z)  # mlp forward
+        c = self.embed(labels) # embedding labels.
+        x = torch.cat([z, c], axis=1)
+        output = self.net(x)  # mlp forward
         output = output.view(
             -1, self.out_channels, self.out_height, self.out_width
         )  # reshape (B, 784) -> (B, C, H, W)
@@ -97,27 +115,38 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
     r"""
-    A modified GAN(Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., ... & Bengio, Y. (2020).
-    Generative adversarial networks. Communications of the ACM, 63(11), 139-144.) Discriminator implementation.
+    A modified cGAN(Mirza, Mehdi, and Simon Osindero. "Conditional generative adversarial nets." 
+    arXiv preprint arXiv:1411.1784 (2014).) Discriminator implementation.
 
     Parameters:
         input_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of input image [C, H, W].
+        n_class (`int`, *optional*, default to `10`): The number of class label of cGAN.
     """
 
     def __init__(
-        self, input_shape: List = [1, 28, 28],
+        self,
+        input_shape: List = [1, 28, 28],
+        n_class: int = 10
     ):
         super().__init__()
         self.in_channels, self.in_height, self.in_width = input_shape
+        self.n_class = n_class
+
+        self.embed = nn.Embedding(self.n_class, self.n_class)
 
         net = [
-            nn.Linear(self.in_channels * self.in_width * self.in_height, 256),
+            nn.Linear(self.in_channels * self.in_width * self.in_height + self.n_class, 512),
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.Linear(256, 256),
+            nn.Linear(512, 512),
+            nn.Dropout(0.4),
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.Linear(256, 1),
+            nn.Linear(512, 512),
+            nn.Dropout(0.4),
+            nn.LeakyReLU(0.2, inplace=True),
+            # -----------------------------
+            nn.Linear(512, 1),
             nn.Sigmoid(),
         ]
 
@@ -140,8 +169,10 @@ class Discriminator(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, input):
+    def forward(self, input, labels):
         x = input.flatten(start_dim=1) # reshape (B, 1, 28, 28) -> (B, 784)
+        c = self.embed(labels)
+        x = torch.cat([x, c], axis=1)
         output = self.net(x)  # mlp forward
 
         return output

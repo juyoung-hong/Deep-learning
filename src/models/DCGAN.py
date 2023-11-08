@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import List
 
 
 class DCGAN(nn.Module):
@@ -9,8 +10,8 @@ class DCGAN(nn.Module):
     deep convolutional generative adversarial networks. arXiv preprint arXiv:1511.06434.) implementation.
 
     Parameters:
-        Generator (`nn.Module`): The Generator of GAN.
-        Discriminator (`nn.Module`): The Discriminator of GAN.
+        Generator (`nn.Module`): The Generator of DCGAN.
+        Discriminator (`nn.Module`): The Discriminator of DCGAN.
     """
 
     def __init__(self, Generator: nn.Module, Discriminator: nn.Module):
@@ -25,7 +26,7 @@ class DCGAN(nn.Module):
         return self.Discriminator
 
     def forward(self):
-        return self.Generator.forward()
+        return self.Generator(1)
 
 
 class Generator(nn.Module):
@@ -34,48 +35,44 @@ class Generator(nn.Module):
     deep convolutional generative adversarial networks. arXiv preprint arXiv:1511.06434.) Generator implementation.
 
     Parameters:
+        output_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of output image [C, H, W].
         z_dim (`int`, *optional*, default to `100`): The size of noise as a input.
+        device (`str`, *optional*, default to `cpu`): one of ['cpu', 'cuda', 'mps'].
     """
 
     def __init__(
         self,
+        output_shape: List = [1, 28, 28],
         z_dim: int = 100,
-        batch_size: int = 64,
-        channels: int = 3,
-        height: int = 32,
-        width: int = 32,
         device: str = None,
     ):
         super().__init__()
+        self.out_channels, self.out_height, self.out_width = output_shape
         self.z_dim = z_dim
-        self.batch_size = batch_size
-        self.channels = channels
-        self.height = height
-        self.width = width
         self.device = device
 
         conv_net = [
             nn.ConvTranspose2d(
                 self.z_dim, 64 * 8, 4, 1, 0, bias=False
-            ),  # (B, 64*8, 2, 2)
+            ),  # (B, 64*8, 4, 4)
             nn.BatchNorm2d(64 * 8),
             nn.ReLU(True),
             # -----------------------------
-            nn.ConvTranspose2d(64 * 8, 64 * 4, 4, 2, 1, bias=False),  # (B, 64*4, 4, 4)
+            nn.ConvTranspose2d(64 * 8, 64 * 4, 4, 2, 1, bias=False),  # (B, 64*4, 8, 8)
             nn.BatchNorm2d(64 * 4),
             nn.ReLU(True),
             # -----------------------------
-            nn.ConvTranspose2d(64 * 4, 64 * 2, 4, 2, 1, bias=False),  # (B, 64*2, 8, 8)
+            nn.ConvTranspose2d(64 * 4, 64 * 2, 4, 2, 1, bias=False),  # (B, 64*2, 16, 16)
             nn.BatchNorm2d(64 * 2),
             nn.ReLU(True),
             # -----------------------------
-            nn.ConvTranspose2d(64 * 2, 64, 4, 2, 1, bias=False),  # (B, 64, 16, 16)
+            nn.ConvTranspose2d(64 * 2, 64, 4, 2, 1, bias=False),  # (B, 64, 32, 32)
             nn.BatchNorm2d(64),
             nn.ReLU(True),
             # -----------------------------
             nn.ConvTranspose2d(
-                64, self.channels, 4, 2, 1, bias=False
-            ),  # (B, 3, 32, 32)
+                64, self.out_channels, 4, 2, 1, bias=False
+            ),  # (B, 3, 64, 64)
             nn.Tanh(),  # last activation layer [-1,1]
         ]
 
@@ -100,15 +97,14 @@ class Generator(nn.Module):
                 m.weight.data.normal_(1.0, 0.02)
                 m.bias.data.fill_(0)
 
-    def sample(self):
-        batch_size = self.batch_size if self.training else 1
+    def sample(self, batch_size: int):
         z = torch.randn(
             (batch_size, self.z_dim, 1, 1), device=self.device
         )  # (B, 100, 1, 1)
         return z
 
-    def forward(self):
-        z = self.sample()  # sample from noraml dist.
+    def forward(self, batch_size: int):
+        z = self.sample(batch_size)  # sample from noraml dist.
         output = self.conv_net(z)  # conv forward
 
         return output
@@ -120,31 +116,30 @@ class Discriminator(nn.Module):
     deep convolutional generative adversarial networks. arXiv preprint arXiv:1511.06434.) Discriminator implementation.
 
     Parameters:
+        input_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of input image [C, H, W].
         z_dim (`int`, *optional*, default to `100`): The size of noise as a input.
     """
 
     def __init__(
-        self, batch_size: int = 64, channels: int = 3, height: int = 32, width: int = 32
+        self,
+        input_shape: List = [1, 28, 28],
     ):
         super().__init__()
-        self.batch_size = batch_size
-        self.channels = channels
-        self.height = height
-        self.width = width
+        self.in_channels, self.in_height, self.in_width = input_shape
+
         conv_net = [
-            nn.Conv2d(self.channels, 64, 4, 2, 1, bias=False),  # (B, 64, 16, 16)
-            nn.BatchNorm2d(64),
+            nn.Conv2d(self.in_channels, 64, 4, 2, 1, bias=False),  # (B, 64, 32, 32)
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.Conv2d(64, 64 * 2, 4, 2, 1, bias=False),  # (B, 128, 8, 8)
+            nn.Conv2d(64, 64 * 2, 4, 2, 1, bias=False),  # (B, 128, 16, 16)
             nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.Conv2d(64 * 2, 64 * 4, 4, 2, 1, bias=False),  # (B, 256, 4, 4)
+            nn.Conv2d(64 * 2, 64 * 4, 4, 2, 1, bias=False),  # (B, 256, 8, 8)
             nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.Conv2d(64 * 4, 64 * 8, 4, 2, 1, bias=False),  # (B, 512, 2, 2)
+            nn.Conv2d(64 * 4, 64 * 8, 4, 2, 1, bias=False),  # (B, 512, 4, 4)
             nn.BatchNorm2d(512),
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
@@ -175,6 +170,6 @@ class Discriminator(nn.Module):
 
     def forward(self, input):
         features = self.conv_net(input)  # conv forward
-        output = features.view(-1)  # reshape (B, 1, 1, 1) -> (B)
+        output = features.flatten(start_dim=1) # reshape (B, 1, 1, 1) -> (B)
 
         return output
