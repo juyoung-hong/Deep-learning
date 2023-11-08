@@ -1,5 +1,5 @@
 # https://github.com/ashleve/lightning-hydra-template/blob/main/src/data/mnist_datamodule.py
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, List, Dict, Optional, Tuple
 
 import torch
 from torch.utils.data import ConcatDataset, DataLoader, Dataset, random_split
@@ -36,6 +36,7 @@ class MNISTDataModule:
         data_dir: str = "data/",
         train_val_test_split: Tuple[int, int, int] = (55_000, 5_000, 10_000),
         batch_size: int = 64,
+        size: List = [28, 28],
         num_workers: int = 0,
         pin_memory: bool = False,
         worker_init_fn: Callable = None,
@@ -53,7 +54,11 @@ class MNISTDataModule:
 
         # data transformations
         self.transforms = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize(mean=(0.5,), std=(0.5,))]
+            [
+                transforms.Resize(size),
+                transforms.ToTensor(), 
+                transforms.Normalize(mean=(0.5,), std=(0.5,))
+            ]
         )
 
         self.data_train: Optional[Dataset] = None

@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: cifar10.yaml
+  - override /data: mnist.yaml
   - override /model: DCGAN.yaml
   - override /loss: BCELoss.yaml
   - override /optimizer: Adam.yaml
@@ -13,33 +13,27 @@ defaults:
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["cifar10", "DCGAN"]
+tags: ["mnist", "DCGAN"]
 
 seed: 42
 
 trainer:
-  epochs: 200
-  accelerator: mps
+  epochs: 128
+  accelerator: cuda
 
 optimizer:
   lr: 0.0002
   betas: [0.5, 0.999]
 
 data:
-  batch_size: 128
+  batch_size: 64
   size: [64, 64]
 
 model:
   Generator:
-    z_dim: 64
-    batch_size: 128
-    channels: 3
-    height: 64
-    width: 64
-    device: mps
+    z_dim: 100
+    channels: 1
+    device: cuda
 
   Discriminator:
-    batch_size: 128
-    channels: 3
-    height: 64
-    width: 64
+    channels: 1

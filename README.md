@@ -40,6 +40,7 @@ python3 src/inference/inference_*.py -o=result -d=cuda -ckpt logs/train/runs/202
 |VAE|[Variational Auto Encoder](docs/VariationalAutoEncoder.md)|
 |GAN|[Generative Adversarial Networks](docs/GAN.md)|
 |cGAN|[Conditional Generative Adversarial Networks](docs/cGAN.md)|
+|DCGAN|[Deep Convolutional Generative Adversarial Networks](docs/DCGAN.md)|
 
 # References
 
