@@ -42,12 +42,12 @@ log = utils.get_pylogger(__name__)
 def get_metrics(device):
 
     metrics = {
-        'Train/GLoss': MeanMetric().to(device),
-        'Train/DLoss': MeanMetric().to(device),
-        'Val/GLoss': MeanMetric().to(device),
-        'Val/DLoss': MeanMetric().to(device),
-        'Test/GLoss': MeanMetric().to(device),
-        'Test/DLoss': MeanMetric().to(device),
+        'Train/G_Loss': MeanMetric().to(device),
+        'Train/D_Loss': MeanMetric().to(device),
+        'Val/G_Loss': MeanMetric().to(device),
+        'Val/D_Loss': MeanMetric().to(device),
+        'Test/G_Loss': MeanMetric().to(device),
+        'Test/D_Loss': MeanMetric().to(device),
     }
 
     return metrics
@@ -194,8 +194,8 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 optimizer_G.step()
 
                 # update metrics
-                metrics['Train/GLoss'](d_loss)
-                metrics['Train/DLoss'](g_loss)
+                metrics['Train/G_Loss'](d_loss)
+                metrics['Train/D_Loss'](g_loss)
 
                 # Get metric
                 if step % cfg.trainer.log_every_n_step == 0:
@@ -238,8 +238,8 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                         g_loss = criterion(outputs, labels)
 
                     # update metrics
-                    metrics['Val/GLoss'](g_loss)
-                    metrics['Val/DLoss'](d_loss)
+                    metrics['Val/G_Loss'](g_loss)
+                    metrics['Val/D_Loss'](d_loss)
                 
                 for k, v in metrics.items():
                     if k.startswith('Val/'):
@@ -305,8 +305,8 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 g_loss = criterion(outputs, labels)
 
             # update metrics
-            metrics['Test/GLoss'](g_loss)
-            metrics['Test/DLoss'](d_loss)
+            metrics['Test/G_Loss'](g_loss)
+            metrics['Test/D_Loss'](d_loss)
         
         for k, v in metrics.items():
             if k.startswith('Test/'):

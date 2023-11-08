@@ -50,18 +50,14 @@ def inference(args):
     device = args.device
 
     G = Generator(
+        output_shape=[1, 28, 28],
         z_dim=100,
-        channels=1,
-        height=28,
-        width=28,
         n_class=10,
         device=device
     )
     
     D = Discriminator(
-        channels=1, 
-        height=28, 
-        width=28,
+        input_shape=[1, 28, 28],
         n_class=10
     )
 
@@ -72,7 +68,7 @@ def inference(args):
     model.load_state_dict(checkpoint['model'])
 
     with torch.no_grad():
-        pred = model(1, torch.tensor([args.label], device=device))
+        pred = model(args.label)
 
     save_path = Path(args.output) / "cgan_predict.png"
     save_image(pred, save_path)

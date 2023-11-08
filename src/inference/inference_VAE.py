@@ -43,8 +43,14 @@ def parse_args():
 def inference(args):
     device = args.device
 
-    encoder = Encoder(channels=1)
-    decoder = Decoder(channels=1)
+    encoder = Encoder(
+        input_shape=[1, 28, 28],
+        z_dim=64
+    )
+    decoder = Decoder(
+        output_shape=[1, 28, 28],
+        z_dim=64
+    )
     model = VariationalAutoEncoder(Encoder=encoder, Decoder=decoder).to(device)
 
     checkpoint = torch.load(args.ckpt_path)

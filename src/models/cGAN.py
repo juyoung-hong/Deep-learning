@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import List
 
 
 class cGAN(nn.Module):
@@ -17,6 +18,7 @@ class cGAN(nn.Module):
         super().__init__()
         self.Generator = Generator
         self.Discriminator = Discriminator
+        self.device = self.Generator.device
 
     def get_generator(self):
         return self.Generator
@@ -24,8 +26,9 @@ class cGAN(nn.Module):
     def get_discriminator(self):
         return self.Discriminator
 
-    def forward(self, batch_size, labels):
-        return self.Generator(batch_size, labels)
+    def forward(self, label: int):
+        label = torch.tensor([label], device=self.device)
+        return self.Generator(1, label)
 
 
 class Generator(nn.Module):
@@ -34,30 +37,24 @@ class Generator(nn.Module):
     arXiv preprint arXiv:1411.1784 (2014).) Generator implementation.
 
     Parameters:
+        output_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of output image [C, H, W].
         z_dim (`int`, *optional*, default to `100`): The size of noise as a input.
-        channels (`int`, *optional*, default to `1`): The channel of a input.
-        height (`int`, *optional*, default to `28`): The height of a input.
-        width (`int`, *optional*, default to `28`): The width of a input.
         n_class (`int`, *optional*, default to `10`): The number of class label of cGAN.
         device (`str`, *optional*, default to `cpu`): one of ['cpu', 'cuda', 'mps'].
     """
 
     def __init__(
         self,
+        output_shape: List = [1, 28, 28],
         z_dim: int = 100,
-        channels: int = 1,
-        height: int = 28,
-        width: int = 28,
         n_class: int = 10,
         device: str = 'cpu'
     ):
         super().__init__()
+        self.out_channels, self.out_height, self.out_width = output_shape
         self.z_dim = z_dim
-        self.channels = channels
-        self.height = height
-        self.width = width
-        self.device = device
         self.n_class = n_class
+        self.device = device
 
         self.embed = nn.Embedding(self.n_class, self.n_class)
 
@@ -77,7 +74,7 @@ class Generator(nn.Module):
             nn.BatchNorm1d(1024),
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.Linear(1024, self.channels * self.width * self.height),
+            nn.Linear(1024, self.out_channels * self.out_width * self.out_height),
             nn.Tanh(),  # last activation layer [-1,1]
         ]
 
@@ -110,7 +107,7 @@ class Generator(nn.Module):
         x = torch.cat([z, c], axis=1)
         output = self.net(x)  # mlp forward
         output = output.view(
-            -1, self.channels, self.height, self.width
+            -1, self.out_channels, self.out_height, self.out_width
         )  # reshape (B, 784) -> (B, C, H, W)
 
         return output
@@ -122,29 +119,23 @@ class Discriminator(nn.Module):
     arXiv preprint arXiv:1411.1784 (2014).) Discriminator implementation.
 
     Parameters:
-        channels (`int`, *optional*, default to `1`): The channel of a input.
-        height (`int`, *optional*, default to `28`): The height of a input.
-        width (`int`, *optional*, default to `28`): The width of a input.
+        input_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of input image [C, H, W].
         n_class (`int`, *optional*, default to `10`): The number of class label of cGAN.
     """
 
     def __init__(
         self,
-        channels: int = 1, 
-        height: int = 28, 
-        width: int = 28, 
+        input_shape: List = [1, 28, 28],
         n_class: int = 10
     ):
         super().__init__()
-        self.channels = channels
-        self.height = height
-        self.width = width
-        self.n_class =n_class
+        self.in_channels, self.in_height, self.in_width = input_shape
+        self.n_class = n_class
 
         self.embed = nn.Embedding(self.n_class, self.n_class)
 
         net = [
-            nn.Linear(self.channels * self.width * self.height + self.n_class, 512),
+            nn.Linear(self.in_channels * self.in_width * self.in_height + self.n_class, 512),
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.Linear(512, 512),

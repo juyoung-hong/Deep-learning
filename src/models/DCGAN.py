@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import List
 
 
 class DCGAN(nn.Module):
@@ -24,8 +25,8 @@ class DCGAN(nn.Module):
     def get_discriminator(self):
         return self.Discriminator
 
-    def forward(self, batch_size):
-        return self.Generator(batch_size)
+    def forward(self):
+        return self.Generator(1)
 
 
 class Generator(nn.Module):
@@ -34,20 +35,20 @@ class Generator(nn.Module):
     deep convolutional generative adversarial networks. arXiv preprint arXiv:1511.06434.) Generator implementation.
 
     Parameters:
+        output_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of output image [C, H, W].
         z_dim (`int`, *optional*, default to `100`): The size of noise as a input.
-        channels (`int`, *optional*, default to `3`): The channel of a input.
         device (`str`, *optional*, default to `cpu`): one of ['cpu', 'cuda', 'mps'].
     """
 
     def __init__(
         self,
+        output_shape: List = [1, 28, 28],
         z_dim: int = 100,
-        channels: int = 3,
         device: str = None,
     ):
         super().__init__()
+        self.out_channels, self.out_height, self.out_width = output_shape
         self.z_dim = z_dim
-        self.channels = channels
         self.device = device
 
         conv_net = [
@@ -70,7 +71,7 @@ class Generator(nn.Module):
             nn.ReLU(True),
             # -----------------------------
             nn.ConvTranspose2d(
-                64, self.channels, 4, 2, 1, bias=False
+                64, self.out_channels, 4, 2, 1, bias=False
             ),  # (B, 3, 64, 64)
             nn.Tanh(),  # last activation layer [-1,1]
         ]
@@ -96,13 +97,13 @@ class Generator(nn.Module):
                 m.weight.data.normal_(1.0, 0.02)
                 m.bias.data.fill_(0)
 
-    def sample(self, batch_size):
+    def sample(self, batch_size: int):
         z = torch.randn(
             (batch_size, self.z_dim, 1, 1), device=self.device
         )  # (B, 100, 1, 1)
         return z
 
-    def forward(self, batch_size):
+    def forward(self, batch_size: int):
         z = self.sample(batch_size)  # sample from noraml dist.
         output = self.conv_net(z)  # conv forward
 
@@ -115,19 +116,19 @@ class Discriminator(nn.Module):
     deep convolutional generative adversarial networks. arXiv preprint arXiv:1511.06434.) Discriminator implementation.
 
     Parameters:
+        input_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of input image [C, H, W].
         z_dim (`int`, *optional*, default to `100`): The size of noise as a input.
-        channels (`int`, *optional*, default to `3`): The channel of a input.
     """
 
     def __init__(
         self,
-        channels: int = 3
+        input_shape: List = [1, 28, 28],
     ):
         super().__init__()
-        self.channels = channels
+        self.in_channels, self.in_height, self.in_width = input_shape
 
         conv_net = [
-            nn.Conv2d(self.channels, 64, 4, 2, 1, bias=False),  # (B, 64, 32, 32)
+            nn.Conv2d(self.in_channels, 64, 4, 2, 1, bias=False),  # (B, 64, 32, 32)
             nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.Conv2d(64, 64 * 2, 4, 2, 1, bias=False),  # (B, 128, 16, 16)

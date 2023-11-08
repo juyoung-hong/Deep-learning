@@ -29,13 +29,4 @@ data:
 
 model:
   Generator:
-    z_dim: 64
-    channels: 1
-    height: 28
-    width: 28
     device: 'cuda'
-
-  Discriminator:
-    channels: 1
-    height: 28
-    width: 28

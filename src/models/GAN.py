@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import List
 
 
 class GAN(nn.Module):
@@ -24,8 +25,8 @@ class GAN(nn.Module):
     def get_discriminator(self):
         return self.Discriminator
 
-    def forward(self, batch_size):
-        return self.Generator(batch_size)
+    def forward(self):
+        return self.Generator(1)
 
 
 class Generator(nn.Module):
@@ -34,36 +35,30 @@ class Generator(nn.Module):
     Generative adversarial networks. Communications of the ACM, 63(11), 139-144.) Generator implementation.
 
     Parameters:
-        z_dim (`int`, *optional*, default to `100`): The size of noise as a input.
-        channels (`int`, *optional*, default to `1`): The channel of a input.
-        height (`int`, *optional*, default to `28`): The height of a input.
-        width (`int`, *optional*, default to `28`): The width of a input.
+        output_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of output image [C, H, W].
+        z_dim (`int`, *optional*, default to `64`): The size of noise as a input.
         device (`str`, *optional*, default to `cpu`): one of ['cpu', 'cuda', 'mps'].
     """
 
     def __init__(
         self,
-        z_dim: int = 100,
-        channels: int = 1,
-        height: int = 28,
-        width: int = 28,
+        output_shape: List = [1, 28, 28],
+        z_dim: int = 64,
         device: str = 'cpu'
     ):
         super().__init__()
+        self.out_channels, self.out_height, self.out_width = output_shape
         self.z_dim = z_dim
-        self.channels = channels
-        self.height = height
-        self.width = width
         self.device = device
 
         net = [
             nn.Linear(self.z_dim, 256),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.Linear(256, 256),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
-            nn.Linear(256, self.channels * self.width * self.height),
+            nn.Linear(256, self.out_channels * self.out_width * self.out_height),
             nn.Tanh(),  # last activation layer [-1,1]
         ]
 
@@ -86,15 +81,15 @@ class Generator(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def sample(self, batch_size):
+    def sample(self, batch_size: int):
         z = torch.randn(size=(batch_size, self.z_dim), device=self.device)
         return z
 
-    def forward(self, batch_size):
+    def forward(self, batch_size: int):
         z = self.sample(batch_size)  # sample from noraml dist.
         output = self.net(z)  # mlp forward
         output = output.view(
-            -1, self.channels, self.height, self.width
+            -1, self.out_channels, self.out_height, self.out_width
         )  # reshape (B, 784) -> (B, C, H, W)
 
         return output
@@ -106,24 +101,21 @@ class Discriminator(nn.Module):
     Generative adversarial networks. Communications of the ACM, 63(11), 139-144.) Discriminator implementation.
 
     Parameters:
-        channels (`int`, *optional*, default to `1`): The channel of a input.
-        height (`int`, *optional*, default to `28`): The height of a input.
-        width (`int`, *optional*, default to `28`): The width of a input.
+        input_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of input image [C, H, W].
     """
 
     def __init__(
-        self, channels: int = 1, height: int = 28, width: int = 28
+        self, input_shape: List = [1, 28, 28],
     ):
         super().__init__()
-        self.channels = channels
-        self.height = height
-        self.width = width
+        self.in_channels, self.in_height, self.in_width = input_shape
+
         net = [
-            nn.Linear(self.channels * self.width * self.height, 256),
-            nn.LeakyReLU(0.2),
+            nn.Linear(self.in_channels * self.in_width * self.in_height, 256),
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.Linear(256, 256),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             # -----------------------------
             nn.Linear(256, 1),
             nn.Sigmoid(),

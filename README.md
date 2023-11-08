@@ -29,7 +29,7 @@ tensorboard --logdir=logs/train/runs
 ```
 4. Inference
 ```bash
-python3 src/inference/inference_*.py -o=result -d=cuda -ckpt logs/train/runs/2023-11-03_12-37-21/ckpt/model/epoch_29.pth
+python3 src/inference/inference_VAE.py -o=result -d=cuda -ckpt logs/train/runs/2023-11-03_12-37-21/ckpt/model/epoch_29.pth
 ```
 
 ## Model Zoo

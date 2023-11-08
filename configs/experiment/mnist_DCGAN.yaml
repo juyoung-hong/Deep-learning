@@ -31,9 +31,4 @@ data:
 
 model:
   Generator:
-    z_dim: 100
-    channels: 1
     device: cuda
-
-  Discriminator:
-    channels: 1

@@ -2,14 +2,10 @@ _target_: src.models.GAN.GAN
 
 Generator:
   _target_: src.models.GAN.Generator
-  z_dim: 100
-  channels: 1
-  height: 28
-  width: 28
+  output_shape: [1, 28, 28]
+  z_dim: 64
   device: cpu
 
 Discriminator:
   _target_: src.models.GAN.Discriminator
-  channels: 1
-  height: 28
-  width: 28
+  input_shape: [1, 28, 28]

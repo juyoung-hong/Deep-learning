@@ -44,17 +44,13 @@ def inference(args):
     device = args.device
 
     G = Generator(
+        output_shape=[1, 28, 28],
         z_dim=64,
-        channels=1,
-        height=28,
-        width=28,
         device=device
     )
     
     D =  Discriminator(
-        channels=1, 
-        height=28, 
-        width=28
+        input_shape=[1, 28, 28]
     )
 
     model = GAN(Generator=G, Discriminator=D).to(device)
@@ -64,7 +60,7 @@ def inference(args):
     model.load_state_dict(checkpoint['model'])
 
     with torch.no_grad():
-        pred = model(1)
+        pred = model()
 
     save_path = Path(args.output) / "gan_predict.png"
     save_image(pred, save_path)
