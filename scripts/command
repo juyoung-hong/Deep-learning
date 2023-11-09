@@ -26,3 +26,7 @@ python3 src/inference/inference_cGAN.py -o=result -d=cuda -ckpt=logs/train/runs/
 # Train / Inference DCGAN
 nohup python3 src/train/train_GAN.py experiment=mnist_DCGAN.yaml &> logs/train_logs/mnist_DCGAN.log &
 python3 src/inference/inference_DCGAN.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-08_11-23-25/ckpt/model/epoch_127.pth
+
+# Train / Inference ACGAN
+nohup python3 src/train/train_ACGAN.py experiment=mnist_ACGAN.yaml &> logs/train_logs/mnist_ACGAN.log &
+python3 src/inference/inference_ACGAN.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-09_13-34-11/ckpt/model/epoch_199.pth -l=7
