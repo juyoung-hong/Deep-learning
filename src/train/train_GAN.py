@@ -113,6 +113,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     model = hydra.utils.instantiate(cfg.model).to(device)
     G = model.get_generator()
     D = model.get_discriminator()
+    G.device = device
 
     # Get Loss function
     criterion = hydra.utils.instantiate(cfg.loss)()

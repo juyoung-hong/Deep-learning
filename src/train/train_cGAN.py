@@ -113,6 +113,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     model = hydra.utils.instantiate(cfg.model).to(device)
     G = model.get_generator()
     D = model.get_discriminator()
+    G.device = device
 
     # Get Loss function
     criterion = hydra.utils.instantiate(cfg.loss)()
@@ -149,8 +150,6 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         # Adversarial ground truths
         real_label = 1.0
         fake_label = 0.0
-
-        n_critic = cfg.get("n_critic")
 
         for epoch in range(cfg.trainer.epochs):
             # train step start
