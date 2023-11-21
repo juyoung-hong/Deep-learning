@@ -251,3 +251,65 @@ class WGANLoss(_Loss):
         wgan_loss = -(input*target).mean()
 
         return wgan_loss
+    
+class Critic_GP(nn.Module):
+    r"""
+    A modified WGAN-GP(Gulrajani, Ishaan, et al. "Improved training of wasserstein gans." 
+    Advances in neural information processing systems 30 (2017)) Critic implementation. 
+
+    Removed Batch Norm from WGAN Critic.
+
+    Parameters:
+        input_shape (`List`, *optional*, default to `[1, 28, 28]`): Shape of input image [C, H, W].
+    """
+
+    def __init__(
+        self,
+        input_shape: List = [1, 28, 28],
+    ):
+        super().__init__()
+        self.in_channels, self.in_height, self.in_width = input_shape
+
+        conv_net = [
+            nn.Conv2d(self.in_channels, 64, 4, 2, 1, bias=False),  # (B, 64, 32, 32)
+            nn.LeakyReLU(0.2, inplace=True),
+            # -----------------------------
+            nn.Conv2d(64, 64 * 2, 4, 2, 1, bias=False),  # (B, 128, 16, 16)
+            nn.LeakyReLU(0.2, inplace=True),
+            # -----------------------------
+            nn.Conv2d(64 * 2, 64 * 4, 4, 2, 1, bias=False),  # (B, 256, 8, 8)
+            nn.LeakyReLU(0.2, inplace=True),
+            # -----------------------------
+            nn.Conv2d(64 * 4, 64 * 8, 4, 2, 1, bias=False),  # (B, 512, 4, 4)
+            nn.LeakyReLU(0.2, inplace=True),
+            # -----------------------------
+            nn.Conv2d(64 * 8, 1, 4, 1, 0, bias=False),  # (B, 1, 1, 1)
+            # nn.Sigmoid(),
+        ]
+
+        # Concat all layers
+        self.conv_net = nn.Sequential()
+        for i, layer in enumerate(conv_net):
+            layer_name = f"{type(layer).__name__.lower()}_{i}"
+            self.conv_net.add_module(layer_name, layer)
+
+        # initialize parameters
+        self.init_params()
+
+    def init_params(self):
+        for m in self.modules():
+            classname = m.__class__.__name__
+            if classname.find("Linear") != -1:  # init Linear
+                nn.init.kaiming_normal_(m.weight)
+                nn.init.zeros_(m.bias)
+            elif classname.find("Conv") != -1:  # init Conv
+                nn.init.kaiming_normal_(m.weight)
+            elif classname.find("BatchNorm") != -1:  # init BN
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, input):
+        features = self.conv_net(input)  # conv forward
+        output = features.flatten(start_dim=1) # reshape (B, 1, 1, 1) -> (B)
+
+        return output
