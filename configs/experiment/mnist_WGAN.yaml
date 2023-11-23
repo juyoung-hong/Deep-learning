@@ -5,26 +5,29 @@
 
 defaults:
   - override /data: mnist.yaml
-  - override /model: DCGAN.yaml
-  - override /loss: BCELoss.yaml
-  - override /optimizer: Adam.yaml
+  - override /model: WGAN.yaml
+  - override /loss: WGANLoss.yaml
+  - override /optimizer: RMSProp.yaml
   - override /trainer: GenerativeModels.yaml
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["mnist", "DCGAN"]
+tags: ["mnist", "WGAN"]
 
 seed: 42
 
 trainer:
-  epochs: 128
+  epochs: 200
   accelerator: cuda
 
 optimizer:
-  lr: 0.0002
-  betas: [0.5, 0.999]
+  lr: 0.00005
 
 data:
   batch_size: 64
   size: [64, 64]
+  num_workers: 2
+
+gradient_clipping: 0.01
+n_critic: 5

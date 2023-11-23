@@ -1,0 +1,9 @@
+_target_: src.models.CycleGAN.CycleGAN
+
+Generator:
+  _target_: src.models.CycleGAN.Generator
+  output_shape: [3, 128, 128]
+
+Discriminator:
+  _target_: src.models.CycleGAN.Discriminator
+  input_shape: [3, 128, 128]

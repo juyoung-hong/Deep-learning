@@ -113,6 +113,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     model = hydra.utils.instantiate(cfg.model).to(device)
     G = model.get_generator()
     D = model.get_discriminator()
+    G.device = device
 
     # Get Loss function
     criterion = hydra.utils.instantiate(cfg.loss)()
@@ -194,8 +195,8 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 optimizer_G.step()
 
                 # update metrics
-                metrics['Train/G_Loss'](d_loss)
-                metrics['Train/D_Loss'](g_loss)
+                metrics['Train/G_Loss'](g_loss)
+                metrics['Train/D_Loss'](d_loss)
 
                 # Get metric
                 if step % cfg.trainer.log_every_n_step == 0:

@@ -1,0 +1,6 @@
+_target_: src.data.horse2zebra_datamodule.Horse2ZebraDataModule
+data_dir: ${paths.data_dir}
+batch_size: 4
+size: [256, 256] # (h, w) or int
+num_workers: 2
+pin_memory: false

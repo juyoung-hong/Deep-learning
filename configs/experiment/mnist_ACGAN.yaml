@@ -4,21 +4,22 @@
 # python train.py experiment=example
 
 defaults:
+  - /loss@aux_loss: NLLLoss.yaml
+  - /loss@gan_loss: BCELoss.yaml
   - override /data: mnist.yaml
-  - override /model: DCGAN.yaml
-  - override /loss: BCELoss.yaml
+  - override /model: ACGAN.yaml
   - override /optimizer: Adam.yaml
   - override /trainer: GenerativeModels.yaml
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["mnist", "DCGAN"]
+tags: ["mnist", "ACGAN"]
 
 seed: 42
 
 trainer:
-  epochs: 128
+  epochs: 200
   accelerator: cuda
 
 optimizer:
@@ -26,5 +27,6 @@ optimizer:
   betas: [0.5, 0.999]
 
 data:
-  batch_size: 64
-  size: [64, 64]
+  batch_size: 128
+  size: [32, 32]
+  num_workers: 2

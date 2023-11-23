@@ -12,6 +12,7 @@ from omegaconf import DictConfig
 from torch.autograd import Variable
 from torchmetrics import MeanMetric, MinMetric
 from torchvision.utils import make_grid, save_image
+import itertools
 
 # from torchmetrics.image.inception import InceptionScore
 # from torchmetrics.image.fid import FrechetInceptionDistance
@@ -42,36 +43,37 @@ log = utils.get_pylogger(__name__)
 def get_metrics(device):
 
     metrics = {
+        'Train/GAN_Loss': MeanMetric().to(device),
+        'Train/Identity_Loss': MeanMetric().to(device),
+        'Train/Cycle_Loss': MeanMetric().to(device),
         'Train/G_Loss': MeanMetric().to(device),
+        'Train/D_A_Loss': MeanMetric().to(device),
+        'Train/D_B_Loss': MeanMetric().to(device),
         'Train/D_Loss': MeanMetric().to(device),
-        'Val/G_Loss': MeanMetric().to(device),
-        'Val/D_Loss': MeanMetric().to(device),
+        'Test/GAN_Loss': MeanMetric().to(device),
+        'Test/Identity_Loss': MeanMetric().to(device),
+        'Test/Cycle_Loss': MeanMetric().to(device),
         'Test/G_Loss': MeanMetric().to(device),
+        'Test/D_A_Loss': MeanMetric().to(device),
+        'Test/D_B_Loss': MeanMetric().to(device),
         'Test/D_Loss': MeanMetric().to(device),
     }
 
     return metrics
 
-def save_figures(real_images, fake_images, cfg, epoch, logger, save_real, test):
+def save_figures(real_A, real_B, fake_A, fake_B, cfg, epoch, logger, test):
     prefix = ('best' if test else 'epoch')
-    if save_real:
-        filename = ('real_epoch' if epoch == 0 else "real_best")
-        save_real_path = Path(cfg.trainer.save_ckpt_dirpath) / (
-        cfg.trainer.save_generated_filename + f"/{filename}.png"
-        )
-        save_real_path.parent.mkdir(parents=True, exist_ok=True)
-        grid_image = make_grid(
-        real_images, nrow=3, normalize=True, value_range=(-1, 1)
-        )
-        save_image(grid_image, save_real_path)
+
+    real_A = make_grid(real_A, nrow=cfg.data.batch_size, normalize=True, value_range=(-1, 1))
+    real_B = make_grid(real_B, nrow=cfg.data.batch_size, normalize=True, value_range=(-1, 1))
+    fake_A = make_grid(fake_A, nrow=cfg.data.batch_size, normalize=True, value_range=(-1, 1))
+    fake_B = make_grid(fake_B, nrow=cfg.data.batch_size, normalize=True, value_range=(-1, 1))
+    grid_image = torch.cat((real_A, fake_B, real_B, fake_A), 1)
 
     save_fake_path = Path(cfg.trainer.save_ckpt_dirpath) / (
         cfg.trainer.save_generated_filename + f"/fake_{prefix}_{epoch}.png"
     )
     save_fake_path.parent.mkdir(parents=True, exist_ok=True)
-    grid_image = make_grid(
-        fake_images, nrow=3, normalize=True, value_range=(-1, 1)
-    )
     save_image(grid_image, save_fake_path)
     if not test:
         logger.add_image("image", grid_image, epoch)
@@ -105,23 +107,28 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
 
     # Get data loader.
     train_dataloader = datamodule.train_dataloader()
-    val_dataloader = datamodule.val_dataloader()
     test_dataloader = datamodule.test_dataloader()
 
     device = cfg.trainer.accelerator
     log.info(f"Instantiating model <{cfg.model._target_}>")
-    model = hydra.utils.instantiate(cfg.model).to(device)
-    G = model.get_generator()
-    D = model.get_discriminator()
-    G.device = device
+    modelA = hydra.utils.instantiate(cfg.model).to(device)
+    modelB = hydra.utils.instantiate(cfg.model).to(device)
+    G_AB = modelA.get_generator()
+    G_BA = modelB.get_generator()
+    D_A = modelA.get_discriminator()
+    D_B = modelB.get_discriminator()
 
     # Get Loss function
-    criterion = hydra.utils.instantiate(cfg.loss)()
+    gan_criterion = hydra.utils.instantiate(cfg.gan_loss)()
+    cycle_criterion = hydra.utils.instantiate(cfg.cycle_loss)()
+    identity_criterion = hydra.utils.instantiate(cfg.identity_loss)()
 
     # Get Optimizer
     optimizer = hydra.utils.instantiate(cfg.optimizer)
-    optimizer_G = optimizer(params=G.parameters())
-    optimizer_D = optimizer(params=D.parameters())
+    optimizer_G = optimizer(params=itertools.chain(G_AB.parameters(), G_BA.parameters()))
+    
+    optimizer_D_A = optimizer(params=D_A.parameters())
+    optimizer_D_B = optimizer(params=D_B.parameters())
 
     # Get Metrics
     metrics = get_metrics(device)
@@ -132,7 +139,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     object_dict = {
         "cfg": cfg,
         "datamodule": datamodule,
-        "model": model,
+        "model": modelA,
         "logger": logger,
     }
 
@@ -142,61 +149,102 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
 
     if cfg.get("compile"):
         log.info("Compiling model!")
-        model = torch.compile(model)
+        modelA = torch.compile(modelA)
+        modelB = torch.compile(modelB)
 
     if cfg.get("train"):
         log.info("Starting training!")
-
-        # Adversarial ground truths
-        real_label = 1.0
-        fake_label = 0.0
-
         for epoch in range(cfg.trainer.epochs):
             # train step start
-            G.train()
-            D.train()
+            G_AB.train()
+            G_BA.train()
+            D_A.train()
+            D_B.train()
             for k, v in metrics.items():
                 if k.startswith('Train/'):
                     v.reset()
 
-            for step, (images, labels) in enumerate(tqdm(train_dataloader)):
+            for step, images in enumerate(tqdm(train_dataloader)):
                 global_step = epoch * len(train_dataloader) + step
+
+                real_A = images['A'].to(device)
+                real_B = images['B'].to(device)
                 # ---------------------
                 #  Train Discriminator: maximize log(D(x)) + log(1 - D(G(z)))
                 # ---------------------
-                optimizer_D.zero_grad()
-                D.zero_grad()
-                real_images = images.to(device)
-                labels = labels.to(device)
-                gan_labels = torch.full(
-                    (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
-                )
-                outputs = D(real_images, labels).view(-1)
-                real_d_loss = criterion(outputs, gan_labels)
+                # train D_A
+                optimizer_D_A.zero_grad()
+                D_A.zero_grad()
+
+                outputs = D_A(real_A)
+                labels = torch.ones_like(outputs, device=device)
+                real_d_loss = gan_criterion(outputs, labels)
                 real_d_loss.backward()
 
-                fake_images = G(cfg.data.batch_size, labels)
-                gan_labels.fill_(fake_label)
-                outputs = D(fake_images.detach(), labels).view(-1)
-                fake_d_loss = criterion(outputs, gan_labels)
+                fake_A = G_BA(real_B)
+                outputs = D_A(fake_A.detach())
+                labels = torch.zeros_like(outputs, device=device)
+                fake_d_loss = gan_criterion(outputs, labels)
                 fake_d_loss.backward()
 
-                d_loss = real_d_loss + fake_d_loss
-                optimizer_D.step()
+                d_a_loss = (real_d_loss + fake_d_loss) / 2
+                optimizer_D_A.step()
 
+                # train D_B
+                optimizer_D_B.zero_grad()
+                D_B.zero_grad()
+
+                outputs = D_B(real_B)
+                labels = torch.ones_like(outputs, device=device)
+                real_d_loss = gan_criterion(outputs, labels)
+                real_d_loss.backward()
+
+                fake_B = G_AB(real_A)
+                outputs = D_B(fake_B.detach())
+                labels = torch.zeros_like(outputs, device=device)
+                fake_d_loss = gan_criterion(outputs, labels)
+                fake_d_loss.backward()
+
+                d_b_loss = (real_d_loss + fake_d_loss) / 2
+                optimizer_D_B.step()
+
+                d_loss = d_a_loss + d_b_loss
                 # -----------------
                 #  Train Generator: maximize log(D(G(z)))
                 # -----------------
                 optimizer_G.zero_grad()
-                G.zero_grad()
-                gan_labels.fill_(real_label)
-                outputs = D(fake_images, labels).view(-1)
-                g_loss = criterion(outputs, gan_labels)
+                G_AB.zero_grad()
+                G_BA.zero_grad()
+
+                # identity loss
+                identity_a_loss = identity_criterion(G_BA(real_A), real_A)
+                identity_b_loss = identity_criterion(G_AB(real_B), real_B)
+                identity_loss = (identity_a_loss + identity_b_loss) / 2
+                
+                # gan loss
+                labels = torch.ones_like(outputs, device=device)
+                gan_ab_loss = gan_criterion(D_B(fake_B), labels)
+                gan_ba_loss = gan_criterion(D_A(fake_A), labels)
+                gan_loss = (gan_ab_loss + gan_ba_loss) / 2
+
+                # cycle loss
+                reconstructed_A = G_BA(fake_B)
+                reconstructed_B = G_AB(fake_A)
+                cycle_a_loss = cycle_criterion(reconstructed_A, real_A)
+                cycle_b_loss = cycle_criterion(reconstructed_B, real_B)
+                cycle_loss = (cycle_a_loss + cycle_b_loss) / 2
+                
+                g_loss = gan_loss + cfg.lambda_cycle*cycle_loss + cfg.lambda_identity*identity_loss
                 g_loss.backward()
                 optimizer_G.step()
 
                 # update metrics
+                metrics['Train/GAN_Loss'](gan_loss)
+                metrics['Train/Identity_Loss'](identity_loss)
+                metrics['Train/Cycle_Loss'](cycle_loss)
                 metrics['Train/G_Loss'](g_loss)
+                metrics['Train/D_A_Loss'](d_a_loss)
+                metrics['Train/D_B_Loss'](d_b_loss)
                 metrics['Train/D_Loss'](d_loss)
 
                 # Get metric
@@ -207,50 +255,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                             message = f"Epoch: {epoch} {k}: {train_loss}"
                             log.info(message)
                             logger.add_scalar(k, train_loss, global_step)
-
-            if epoch % cfg.trainer.check_val_every_n_epoch == 0:
-                # ---------------------
-                #  Validation
-                # --------------------- 
-                G.eval()
-                D.eval()
-                for k, v in metrics.items():
-                    if k.startswith('Val/'):
-                        v.reset()
-
-                for step, (images, labels) in enumerate(tqdm(val_dataloader)):
-                    with torch.no_grad():
-                        real_images = images.to(device)
-                        labels = labels.to(device)
-                        gan_labels = torch.full(
-                            (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
-                        )
-                        
-                        outputs = D(real_images, labels).view(-1)
-                        real_d_loss = criterion(outputs, gan_labels)
-
-                        fake_images = G(cfg.data.batch_size, labels)
-                        gan_labels.fill_(fake_label)
-                        outputs = D(fake_images.detach(), labels).view(-1)
-                        fake_d_loss = criterion(outputs, gan_labels)
-
-                        d_loss = real_d_loss + fake_d_loss
-
-                        gan_labels.fill_(real_label)
-                        outputs = D(fake_images, labels).view(-1)
-                        g_loss = criterion(outputs, gan_labels)
-
-                    # update metrics
-                    metrics['Val/G_Loss'](g_loss)
-                    metrics['Val/D_Loss'](d_loss)
                 
-                for k, v in metrics.items():
-                    if k.startswith('Val/'):
-                        val_loss = v.compute()
-                        message = f"Epoch: {epoch} {k}: {val_loss}"
-                        log.info(message)
-                        logger.add_scalar(k, val_loss, epoch)
-
             if epoch % cfg.trainer.save_ckpt_every_n_epoch == 0:
                 save_path = Path(cfg.trainer.save_ckpt_dirpath) / (
                     cfg.trainer.save_filename + f"/epoch_{epoch}.pth"
@@ -258,17 +263,16 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 save_path.parent.mkdir(parents=True, exist_ok=True)
                 state = {
                     "epoch": epoch,
-                    "model": model.state_dict(),
+                    "modelA": modelA.state_dict(),
+                    "modelB": modelB.state_dict(),
                     "optimizer_G": optimizer_G.state_dict(),
-                    "optimizer_D": optimizer_D.state_dict(),
+                    "optimizer_D_A": optimizer_D_A.state_dict(),
+                    "optimizer_D_B": optimizer_D_B.state_dict(),
                 }
                 torch.save(state, save_path)
 
             if epoch % cfg.trainer.generate_every_n_epoch == 0:
-                real_images = images[:9]
-                fake_images = fake_images[:9]
-                save_real = (True if epoch == 0 else False)
-                save_figures(real_images, fake_images, cfg, epoch, logger, save_real, False)
+                save_figures(real_A, real_B, fake_A, fake_B, cfg, epoch, logger, False)
 
     if cfg.get("test"):
         log.info("Starting testing!")
@@ -280,36 +284,70 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         # ---------------------
         #  Test
         # ---------------------   
-        G.eval()
-        D.eval()
+        G_AB.eval()
+        G_BA.eval()
+        D_A.eval()
+        D_B.eval()
         for k, v in metrics.items():
             if k.startswith('Test/'):
                 v.reset()
 
-        for step, (images, labels) in enumerate(tqdm(test_dataloader)):
+        for step, images in enumerate(tqdm(test_dataloader)):
             with torch.no_grad():
-                real_images = images.to(device)
-                labels = labels.to(device)
-                gan_labels = torch.full(
-                    (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
-                )
+                real_A = images['A'].to(device)
+                real_B = images['B'].to(device)
+
+                outputs = D_A(real_A)
+                labels = torch.ones_like(outputs, device=device)
+                real_d_loss = gan_criterion(outputs, labels)
+
+                fake_A = G_BA(real_B)
+                outputs = D_A(fake_A)
+                labels = torch.zeros_like(outputs, device=device)
+                fake_d_loss = gan_criterion(outputs, labels)
+
+                d_a_loss = (real_d_loss + fake_d_loss) / 2
+
+                labels = torch.ones_like(outputs, device=device)
+                outputs = D_B(real_B)
+                real_d_loss = gan_criterion(outputs, labels)
+
+                fake_B = G_AB(real_A)
+                outputs = D_B(fake_B)
+                labels = torch.zeros_like(outputs, device=device)
+                fake_d_loss = gan_criterion(outputs, labels)
+
+                d_b_loss = (real_d_loss + fake_d_loss) / 2
+
+                d_loss = d_a_loss + d_b_loss
+
+                # identity loss
+                identity_a_loss = identity_criterion(G_BA(real_A), real_A)
+                identity_b_loss = identity_criterion(G_AB(real_B), real_B)
+                identity_loss = (identity_a_loss + identity_b_loss) / 2
                 
-                outputs = D(real_images, labels).view(-1)
-                real_d_loss = criterion(outputs, gan_labels)
+                # gan loss
+                labels = torch.ones_like(outputs, device=device)
+                gan_ab_loss = gan_criterion(D_B(fake_B), labels)
+                gan_ba_loss = gan_criterion(D_A(fake_A), labels)
+                gan_loss = (gan_ab_loss + gan_ba_loss) / 2
 
-                fake_images = G(cfg.data.batch_size, labels)
-                gan_labels.fill_(fake_label)
-                outputs = D(fake_images.detach(), labels).view(-1)
-                fake_d_loss = criterion(outputs, gan_labels)
-
-                d_loss = real_d_loss + fake_d_loss
-
-                gan_labels.fill_(real_label)
-                outputs = D(fake_images, labels).view(-1)
-                g_loss = criterion(outputs, gan_labels)
+                # cycle loss
+                reconstructed_A = G_BA(fake_B)
+                reconstructed_B = G_AB(fake_A)
+                cycle_a_loss = cycle_criterion(reconstructed_A, real_A)
+                cycle_b_loss = cycle_criterion(reconstructed_B, real_B)
+                cycle_loss = (cycle_a_loss + cycle_b_loss) / 2
+                
+                g_loss = gan_loss + cfg.lambda_cycle*cycle_loss + cfg.lambda_identity*identity_loss
 
             # update metrics
+            metrics['Test/GAN_Loss'](gan_loss)
+            metrics['Test/Identity_Loss'](identity_loss)
+            metrics['Test/Cycle_Loss'](cycle_loss)
             metrics['Test/G_Loss'](g_loss)
+            metrics['Test/D_A_Loss'](d_a_loss)
+            metrics['Test/D_B_Loss'](d_b_loss)
             metrics['Test/D_Loss'](d_loss)
         
         for k, v in metrics.items():
@@ -319,9 +357,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 log.info(message)
                 logger.add_scalar(k, test_loss, epoch)
 
-        real_images = images[:9]
-        fake_images = fake_images[:9]
-        save_figures(real_images, fake_images, cfg, epoch, logger, True, True)
+        save_figures(real_A, real_B, fake_A, fake_B, cfg, epoch, logger, True)
 
 
 @hydra.main(version_base="1.3", config_path="../../configs", config_name="train.yaml")

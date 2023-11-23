@@ -26,7 +26,3 @@ optimizer:
 
 data:
   batch_size: 256
-
-model:
-  Generator:
-    device: 'cuda'

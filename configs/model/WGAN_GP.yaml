@@ -1,0 +1,11 @@
+_target_: src.models.WGAN_GP.WGAN_GP
+
+Generator:
+  _target_: src.models.WGAN_GP.Generator
+  output_shape: [1, 28, 28]
+  z_dim: 100
+  device: cpu
+
+Discriminator:
+  _target_: src.models.WGAN_GP.Critic
+  input_shape: [1, 28, 28]

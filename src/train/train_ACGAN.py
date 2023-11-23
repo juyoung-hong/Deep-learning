@@ -9,8 +9,8 @@ import hydra
 import pyrootutils
 import torch
 from omegaconf import DictConfig
-from torch.autograd import Variable
-from torchmetrics import MeanMetric, MinMetric
+from torchmetrics import MeanMetric
+from torchmetrics.classification.accuracy import Accuracy
 from torchvision.utils import make_grid, save_image
 
 # from torchmetrics.image.inception import InceptionScore
@@ -39,15 +39,32 @@ from src import utils
 
 log = utils.get_pylogger(__name__)
 
-def get_metrics(device):
+def get_metrics(device, n_class):
 
     metrics = {
         'Train/G_Loss': MeanMetric().to(device),
+        'Train/G_GANLoss': MeanMetric().to(device),
+        'Train/G_NLLLoss': MeanMetric().to(device),
         'Train/D_Loss': MeanMetric().to(device),
+        'Train/D_GANLoss': MeanMetric().to(device),
+        'Train/D_NLLLoss': MeanMetric().to(device),
+        'Train/Accuracy': Accuracy(task="multiclass", num_classes=n_class).to(device),
+        
         'Val/G_Loss': MeanMetric().to(device),
+        'Val/G_GANLoss': MeanMetric().to(device),
+        'Val/G_NLLLoss': MeanMetric().to(device),
         'Val/D_Loss': MeanMetric().to(device),
+        'Val/D_GANLoss': MeanMetric().to(device),
+        'Val/D_NLLLoss': MeanMetric().to(device),
+        'Val/Accuracy': Accuracy(task="multiclass", num_classes=n_class).to(device),
+        
         'Test/G_Loss': MeanMetric().to(device),
+        'Test/G_GANLoss': MeanMetric().to(device),
+        'Test/G_NLLLoss': MeanMetric().to(device),
         'Test/D_Loss': MeanMetric().to(device),
+        'Test/D_GANLoss': MeanMetric().to(device),
+        'Test/D_NLLLoss': MeanMetric().to(device),
+        'Test/Accuracy': Accuracy(task="multiclass", num_classes=n_class).to(device),
     }
 
     return metrics
@@ -116,7 +133,8 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     G.device = device
 
     # Get Loss function
-    criterion = hydra.utils.instantiate(cfg.loss)()
+    gan_criterion = hydra.utils.instantiate(cfg.gan_loss)()
+    class_criterion = hydra.utils.instantiate(cfg.aux_loss)()
 
     # Get Optimizer
     optimizer = hydra.utils.instantiate(cfg.optimizer)
@@ -124,7 +142,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     optimizer_D = optimizer(params=D.parameters())
 
     # Get Metrics
-    metrics = get_metrics(device)
+    metrics = get_metrics(device, n_class=D.n_class)
 
     log.info(f"Instantiating logger <{cfg.logger._target_}>")
     logger = hydra.utils.instantiate(cfg.get("logger"))
@@ -162,7 +180,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
             for step, (images, labels) in enumerate(tqdm(train_dataloader)):
                 global_step = epoch * len(train_dataloader) + step
                 # ---------------------
-                #  Train Discriminator: maximize log(D(x)) + log(1 - D(G(z)))
+                #  Train Discriminator
                 # ---------------------
                 optimizer_D.zero_grad()
                 D.zero_grad()
@@ -171,33 +189,49 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 gan_labels = torch.full(
                     (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
                 )
-                outputs = D(real_images, labels).view(-1)
-                real_d_loss = criterion(outputs, gan_labels)
-                real_d_loss.backward()
+                gan_outputs, class_outputs = D(real_images)
+                d_real_gan_loss = gan_criterion(gan_outputs, gan_labels)
+                d_real_class_loss = class_criterion(class_outputs, labels)
+                d_real_loss = d_real_gan_loss + d_real_class_loss
+                d_real_loss.backward()
 
-                fake_images = G(cfg.data.batch_size, labels)
+                fake_images = G(labels)
                 gan_labels.fill_(fake_label)
-                outputs = D(fake_images.detach(), labels).view(-1)
-                fake_d_loss = criterion(outputs, gan_labels)
-                fake_d_loss.backward()
+                gan_outputs, class_outputs = D(fake_images.detach())
+                d_fake_gan_loss = gan_criterion(gan_outputs, gan_labels)
+                d_fake_class_loss = class_criterion(class_outputs, labels)
+                d_fake_loss = d_fake_gan_loss + d_fake_class_loss
+                d_fake_loss.backward()
 
-                d_loss = real_d_loss + fake_d_loss
+                d_loss = d_real_loss + d_fake_loss
+                d_gan_loss = d_real_gan_loss + d_fake_gan_loss
+                d_class_loss = d_real_class_loss + d_fake_class_loss
                 optimizer_D.step()
 
                 # -----------------
-                #  Train Generator: maximize log(D(G(z)))
+                #  Train Generator
                 # -----------------
                 optimizer_G.zero_grad()
                 G.zero_grad()
                 gan_labels.fill_(real_label)
-                outputs = D(fake_images, labels).view(-1)
-                g_loss = criterion(outputs, gan_labels)
+                gan_outputs, class_outputs = D(fake_images)
+                g_gan_loss = gan_criterion(gan_outputs, gan_labels)
+                g_class_loss = class_criterion(class_outputs, labels)
+                g_loss = g_gan_loss + g_class_loss
                 g_loss.backward()
                 optimizer_G.step()
 
                 # update metrics
+                metrics['Train/G_GANLoss'](g_gan_loss)
+                metrics['Train/G_NLLLoss'](g_class_loss)
                 metrics['Train/G_Loss'](g_loss)
+                
+                metrics['Train/D_GANLoss'](d_gan_loss)
+                metrics['Train/D_NLLLoss'](d_class_loss)
                 metrics['Train/D_Loss'](d_loss)
+                
+                preds = torch.argmax(class_outputs, dim=1)
+                metrics['Train/Accuracy'](preds, labels)
 
                 # Get metric
                 if step % cfg.trainer.log_every_n_step == 0:
@@ -226,23 +260,39 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                             (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
                         )
                         
-                        outputs = D(real_images, labels).view(-1)
-                        real_d_loss = criterion(outputs, gan_labels)
+                        gan_outputs, class_outputs = D(real_images)
+                        d_real_gan_loss = gan_criterion(gan_outputs, gan_labels)
+                        d_real_class_loss = class_criterion(class_outputs, labels)
+                        d_real_loss = d_real_gan_loss + d_real_class_loss
 
-                        fake_images = G(cfg.data.batch_size, labels)
+                        fake_images = G(labels)
                         gan_labels.fill_(fake_label)
-                        outputs = D(fake_images.detach(), labels).view(-1)
-                        fake_d_loss = criterion(outputs, gan_labels)
+                        gan_outputs, class_outputs = D(fake_images.detach())
+                        d_fake_gan_loss = gan_criterion(gan_outputs, gan_labels)
+                        d_fake_class_loss = class_criterion(class_outputs, labels)
+                        d_fake_loss = d_fake_gan_loss + d_fake_class_loss
 
-                        d_loss = real_d_loss + fake_d_loss
+                        d_loss = d_real_loss + d_fake_loss
+                        d_gan_loss = d_real_gan_loss + d_fake_gan_loss
+                        d_class_loss = d_real_class_loss + d_fake_class_loss
 
                         gan_labels.fill_(real_label)
-                        outputs = D(fake_images, labels).view(-1)
-                        g_loss = criterion(outputs, gan_labels)
+                        gan_outputs, class_outputs = D(fake_images)
+                        g_gan_loss = gan_criterion(gan_outputs, gan_labels)
+                        g_class_loss = class_criterion(class_outputs, labels)
+                        g_loss = g_gan_loss + g_class_loss
 
                     # update metrics
+                    metrics['Val/G_GANLoss'](g_gan_loss)
+                    metrics['Val/G_NLLLoss'](g_class_loss)
                     metrics['Val/G_Loss'](g_loss)
+                    
+                    metrics['Val/D_GANLoss'](d_gan_loss)
+                    metrics['Val/D_NLLLoss'](d_class_loss)
                     metrics['Val/D_Loss'](d_loss)
+
+                    preds = torch.argmax(class_outputs, dim=1)
+                    metrics['Val/Accuracy'](preds, labels)
                 
                 for k, v in metrics.items():
                     if k.startswith('Val/'):
@@ -294,23 +344,39 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                     (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
                 )
                 
-                outputs = D(real_images, labels).view(-1)
-                real_d_loss = criterion(outputs, gan_labels)
+                gan_outputs, class_outputs = D(real_images)
+                d_real_gan_loss = gan_criterion(gan_outputs, gan_labels)
+                d_real_class_loss = class_criterion(class_outputs, labels)
+                d_real_loss = d_real_gan_loss + d_real_class_loss
 
-                fake_images = G(cfg.data.batch_size, labels)
+                fake_images = G(labels)
                 gan_labels.fill_(fake_label)
-                outputs = D(fake_images.detach(), labels).view(-1)
-                fake_d_loss = criterion(outputs, gan_labels)
+                gan_outputs, class_outputs = D(fake_images.detach())
+                d_fake_gan_loss = gan_criterion(gan_outputs, gan_labels)
+                d_fake_class_loss = class_criterion(class_outputs, labels)
+                d_fake_loss = d_fake_gan_loss + d_fake_class_loss
 
-                d_loss = real_d_loss + fake_d_loss
+                d_loss = d_real_loss + d_fake_loss
+                d_gan_loss = d_real_gan_loss + d_fake_gan_loss
+                d_class_loss = d_real_class_loss + d_fake_class_loss
 
                 gan_labels.fill_(real_label)
-                outputs = D(fake_images, labels).view(-1)
-                g_loss = criterion(outputs, gan_labels)
+                gan_outputs, class_outputs = D(fake_images)
+                g_gan_loss = gan_criterion(gan_outputs, gan_labels)
+                g_class_loss = class_criterion(class_outputs, labels)
+                g_loss = g_gan_loss + g_class_loss
 
             # update metrics
+            metrics['Test/G_GANLoss'](g_gan_loss)
+            metrics['Test/G_NLLLoss'](g_class_loss)
             metrics['Test/G_Loss'](g_loss)
+            
+            metrics['Test/D_GANLoss'](d_gan_loss)
+            metrics['Test/D_NLLLoss'](d_class_loss)
             metrics['Test/D_Loss'](d_loss)
+
+            preds = torch.argmax(class_outputs, dim=1)
+            metrics['Test/Accuracy'](preds, labels)
         
         for k, v in metrics.items():
             if k.startswith('Test/'):

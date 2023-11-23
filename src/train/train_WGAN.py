@@ -147,9 +147,9 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     if cfg.get("train"):
         log.info("Starting training!")
 
-        # Adversarial ground truths
+        # Adversarial ground truths (GAN: 0,1 => WGAN: -1, 1)
         real_label = 1.0
-        fake_label = 0.0
+        fake_label = -1.0
 
         for epoch in range(cfg.trainer.epochs):
             # train step start
@@ -162,51 +162,57 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
             for step, (images, labels) in enumerate(tqdm(train_dataloader)):
                 global_step = epoch * len(train_dataloader) + step
                 # ---------------------
-                #  Train Discriminator: maximize log(D(x)) + log(1 - D(G(z)))
+                #  Train Discriminator
                 # ---------------------
                 optimizer_D.zero_grad()
                 D.zero_grad()
                 real_images = images.to(device)
-                labels = labels.to(device)
-                gan_labels = torch.full(
+                labels = torch.full(
                     (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
                 )
-                outputs = D(real_images, labels).view(-1)
-                real_d_loss = criterion(outputs, gan_labels)
+                outputs = D(real_images).view(-1)
+                real_d_loss = criterion(outputs, labels)
                 real_d_loss.backward()
 
-                fake_images = G(cfg.data.batch_size, labels)
-                gan_labels.fill_(fake_label)
-                outputs = D(fake_images.detach(), labels).view(-1)
-                fake_d_loss = criterion(outputs, gan_labels)
+                fake_images = G(cfg.data.batch_size)
+                labels.fill_(fake_label)
+                outputs = D(fake_images.detach()).view(-1)
+                fake_d_loss = criterion(outputs, labels)
                 fake_d_loss.backward()
 
                 d_loss = real_d_loss + fake_d_loss
                 optimizer_D.step()
 
-                # -----------------
-                #  Train Generator: maximize log(D(G(z)))
-                # -----------------
-                optimizer_G.zero_grad()
-                G.zero_grad()
-                gan_labels.fill_(real_label)
-                outputs = D(fake_images, labels).view(-1)
-                g_loss = criterion(outputs, gan_labels)
-                g_loss.backward()
-                optimizer_G.step()
+                # gradient clipping
+                for p in D.parameters():
+                    p.data.clamp_(-cfg.gradient_clipping, cfg.gradient_clipping)
 
                 # update metrics
-                metrics['Train/G_Loss'](g_loss)
                 metrics['Train/D_Loss'](d_loss)
 
-                # Get metric
-                if step % cfg.trainer.log_every_n_step == 0:
-                    for k, v in metrics.items():
-                        if k.startswith('Train/'):
-                            train_loss = v.compute()
-                            message = f"Epoch: {epoch} {k}: {train_loss}"
-                            log.info(message)
-                            logger.add_scalar(k, train_loss, global_step)
+                if step % cfg.n_critic == 0:        
+                    # -----------------
+                    #  Train Generator
+                    # -----------------
+                    optimizer_G.zero_grad()
+                    G.zero_grad()
+                    labels.fill_(real_label)
+                    outputs = D(fake_images).view(-1)
+                    g_loss = criterion(outputs, labels)
+                    g_loss.backward()
+                    optimizer_G.step()
+
+                    # update metrics
+                    metrics['Train/G_Loss'](g_loss)
+
+                    # Get metric
+                    if step % cfg.trainer.log_every_n_step == 0:
+                        for k, v in metrics.items():
+                            if k.startswith('Train/'):
+                                train_loss = v.compute()
+                                message = f"Epoch: {epoch} {k}: {train_loss}"
+                                log.info(message)
+                                logger.add_scalar(k, train_loss, global_step)
 
             if epoch % cfg.trainer.check_val_every_n_epoch == 0:
                 # ---------------------
@@ -221,24 +227,23 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 for step, (images, labels) in enumerate(tqdm(val_dataloader)):
                     with torch.no_grad():
                         real_images = images.to(device)
-                        labels = labels.to(device)
-                        gan_labels = torch.full(
+                        labels = torch.full(
                             (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
                         )
                         
-                        outputs = D(real_images, labels).view(-1)
-                        real_d_loss = criterion(outputs, gan_labels)
+                        outputs = D(real_images).view(-1)
+                        real_d_loss = criterion(outputs, labels)
 
-                        fake_images = G(cfg.data.batch_size, labels)
-                        gan_labels.fill_(fake_label)
-                        outputs = D(fake_images.detach(), labels).view(-1)
-                        fake_d_loss = criterion(outputs, gan_labels)
+                        fake_images = G(cfg.data.batch_size)
+                        labels.fill_(fake_label)
+                        outputs = D(fake_images.detach()).view(-1)
+                        fake_d_loss = criterion(outputs, labels)
 
                         d_loss = real_d_loss + fake_d_loss
 
-                        gan_labels.fill_(real_label)
-                        outputs = D(fake_images, labels).view(-1)
-                        g_loss = criterion(outputs, gan_labels)
+                        labels.fill_(real_label)
+                        outputs = D(fake_images).view(-1)
+                        g_loss = criterion(outputs, labels)
 
                     # update metrics
                     metrics['Val/G_Loss'](g_loss)
@@ -289,24 +294,23 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         for step, (images, labels) in enumerate(tqdm(test_dataloader)):
             with torch.no_grad():
                 real_images = images.to(device)
-                labels = labels.to(device)
-                gan_labels = torch.full(
+                labels = torch.full(
                     (cfg.data.batch_size,), real_label, dtype=torch.float, device=device
                 )
                 
-                outputs = D(real_images, labels).view(-1)
-                real_d_loss = criterion(outputs, gan_labels)
+                outputs = D(real_images).view(-1)
+                real_d_loss = criterion(outputs, labels)
 
-                fake_images = G(cfg.data.batch_size, labels)
-                gan_labels.fill_(fake_label)
-                outputs = D(fake_images.detach(), labels).view(-1)
-                fake_d_loss = criterion(outputs, gan_labels)
+                fake_images = G(cfg.data.batch_size)
+                labels.fill_(fake_label)
+                outputs = D(fake_images.detach()).view(-1)
+                fake_d_loss = criterion(outputs, labels)
 
                 d_loss = real_d_loss + fake_d_loss
 
-                gan_labels.fill_(real_label)
-                outputs = D(fake_images, labels).view(-1)
-                g_loss = criterion(outputs, gan_labels)
+                labels.fill_(real_label)
+                outputs = D(fake_images).view(-1)
+                g_loss = criterion(outputs, labels)
 
             # update metrics
             metrics['Test/G_Loss'](g_loss)

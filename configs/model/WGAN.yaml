@@ -1,0 +1,11 @@
+_target_: src.models.DCGAN.DCGAN
+
+Generator:
+  _target_: src.models.DCGAN.Generator
+  output_shape: [1, 28, 28]
+  z_dim: 100
+  device: cpu
+
+Discriminator:
+  _target_: src.models.DCGAN.Critic
+  input_shape: [1, 28, 28]

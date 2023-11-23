@@ -26,3 +26,19 @@ python3 src/inference/inference_cGAN.py -o=result -d=cuda -ckpt=logs/train/runs/
 # Train / Inference DCGAN
 nohup python3 src/train/train_GAN.py experiment=mnist_DCGAN.yaml &> logs/train_logs/mnist_DCGAN.log &
 python3 src/inference/inference_DCGAN.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-08_11-23-25/ckpt/model/epoch_127.pth
+
+# Train / Inference ACGAN
+nohup python3 src/train/train_ACGAN.py experiment=mnist_ACGAN.yaml &> logs/train_logs/mnist_ACGAN.log &
+python3 src/inference/inference_ACGAN.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-09_13-34-11/ckpt/model/epoch_199.pth -l=7
+
+# Train / Inference WGAN
+nohup python3 src/train/train_WGAN.py experiment=mnist_WGAN.yaml &> logs/train_logs/mnist_WGAN.log &
+python3 src/inference/inference_DCGAN.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-10_11-51-35/ckpt/model/epoch_199.pth
+
+# Train / Inference WGAN-GP
+nohup python3 src/train/train_WGAN-GP.py experiment=mnist_WGAN-GP.yaml &> logs/train_logs/mnist_WGAN-GP.log &
+python3 src/inference/inference_WGAN-GP.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-21_17-37-47/ckpt/model/epoch_199.pth
+
+# Train / Inference CycleGAN
+nohup python3 src/train/train_CycleGAN.py experiment=horse2zebra_CycleGAN.yaml &> logs/train_logs/horse2zebra_CycleGAN.log &
+python3 src/inference/inference_CycleGAN.py -o=result -d=cuda -b=4 -ckpt=logs/train/runs/2023-11-22_16-50-57/ckpt/model/epoch_199.pth
