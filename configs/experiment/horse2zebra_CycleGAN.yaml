@@ -1,0 +1,35 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - /loss@gan_loss: MSELoss.yaml
+  - /loss@cycle_loss: L1Loss.yaml
+  - /loss@identity_loss: L1Loss.yaml
+  - override /data: horse2zebra.yaml
+  - override /model: CycleGAN.yaml
+  - override /optimizer: Adam.yaml
+  - override /trainer: GenerativeModels.yaml
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["horse2zebra", "CycleGAN"]
+
+seed: 42
+
+trainer:
+  epochs: 200
+  accelerator: cuda
+
+optimizer:
+  lr: 0.0002
+  betas: [0.5, 0.999]
+
+data:
+  batch_size: 4
+  num_workers: 4
+
+lambda_cycle: 10
+lambda_identity: 5

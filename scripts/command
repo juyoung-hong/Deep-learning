@@ -37,4 +37,8 @@ python3 src/inference/inference_DCGAN.py -o=result -d=cuda -ckpt=logs/train/runs
 
 # Train / Inference WGAN-GP
 nohup python3 src/train/train_WGAN-GP.py experiment=mnist_WGAN-GP.yaml &> logs/train_logs/mnist_WGAN-GP.log &
-python3 src/inference/inference_WGAN-GP.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-16_11-01-35/ckpt/model/epoch_199.pth
+python3 src/inference/inference_WGAN-GP.py -o=result -d=cuda -ckpt=logs/train/runs/2023-11-21_17-37-47/ckpt/model/epoch_199.pth
+
+# Train / Inference CycleGAN
+nohup python3 src/train/train_CycleGAN.py experiment=horse2zebra_CycleGAN.yaml &> logs/train_logs/horse2zebra_CycleGAN.log &
+python3 src/inference/inference_CycleGAN.py -o=result -d=cuda -b=4 -ckpt=logs/train/runs/2023-11-22_16-50-57/ckpt/model/epoch_199.pth

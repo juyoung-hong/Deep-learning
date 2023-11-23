@@ -41,6 +41,10 @@ python3 src/inference/inference_VAE.py -o=result -d=cuda -ckpt logs/train/runs/2
 |GAN|[Generative Adversarial Networks](docs/GAN.md)|
 |cGAN|[Conditional Generative Adversarial Networks](docs/cGAN.md)|
 |DCGAN|[Deep Convolutional Generative Adversarial Networks](docs/DCGAN.md)|
+|ACGAN|[Auxiliary Classifier Generative Adversarial Networks](docs/ACGAN.md)|
+|WGAN|[Wasserstein Generative Adversarial Networks](docs/WGAN.md)|
+|WGAN-GP|[Wasserstein Generative Adversarial Networks - Gradient Penalty](docs/WGAN-GP.md)|
+|CycleGAN|[Cycle Consistent Adversarial Networks](docs/CycleGAN.md)|
 
 # References
 
